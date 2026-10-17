@@ -2,7 +2,7 @@ import pytest
 
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
-from customers.models import BaseCustomer
+from customers.schemas import BaseCustomer
 from atelier_api.main import app
 
 client = TestClient(app)
