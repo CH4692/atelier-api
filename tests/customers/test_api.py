@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
-from customers.schemas import CustomerRead
+
 from atelier_api.main import app
+from customers.schemas import CustomerRead
 
 testdata_customers : list[CustomerRead] = [ 
     CustomerRead(
