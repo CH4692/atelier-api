@@ -1,6 +1,7 @@
 from fastapi import FastAPI
-from health.router import health_router
+
 from customers.router import customers_router
+from health.router import health_router
 
 app = FastAPI()
 

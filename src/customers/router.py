@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+
 from .schemas import CustomerRead
 
 customers_router = APIRouter(prefix="/customers")
