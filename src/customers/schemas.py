@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr
 
+
 class BaseCustomer(BaseModel):
     first_name: str
     last_name: str
