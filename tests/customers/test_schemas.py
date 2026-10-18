@@ -2,7 +2,7 @@ import pytest
 
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
-from customers.schemas import BaseCustomer
+from customers.schemas import CustomerRead
 from atelier_api.main import app
 
 client = TestClient(app)
@@ -19,7 +19,7 @@ def customer_data():
     }
 
 def test_accepts_valid_customer(customer_data):
-    customer = BaseCustomer(**customer_data)
+    customer = CustomerRead(**customer_data)
     assert customer.model_dump() == customer_data
 
 @pytest.mark.parametrize(
@@ -31,7 +31,7 @@ def test_rejects_missing_required_field(customer_data, field):
     del customer_data[field]
 
     with pytest.raises(ValidationError) as error:
-        BaseCustomer(**customer_data)
+        CustomerRead(**customer_data)
 
     assert any(
         issue["loc"] == (field, ) and issue["type"] == "missing" 
@@ -46,7 +46,7 @@ def test_rejects_invalid_email(customer_data, email):
     customer_data["email"] = email
 
     with pytest.raises(ValidationError) as error:
-        BaseCustomer(**customer_data)
+        CustomerRead(**customer_data)
 
     assert any(
         issue["loc"] == ("email",)
