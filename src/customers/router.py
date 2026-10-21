@@ -1,25 +1,20 @@
-from fastapi import APIRouter
-
-from .schemas import CustomerRead
+from fastapi import APIRouter, status
+from sqlmodel import select
+from .schemas import CustomerRead, CustomerCreate
+from atelier_api.database import SessionDep
+from .models import Customer
 
 customers_router = APIRouter(prefix="/customers")
 
-customers: list[CustomerRead] = [ 
-    CustomerRead(
-        id= 1,
-        first_name= "Charles",
-        last_name= "Heller",
-        email= "charles.heller@hotmail.de",
-        phone= "+49123456789"
-    ),
-    CustomerRead(
-        id=2,
-        first_name= "David",
-        last_name= "Amoako",
-        email= "example@hotmail.de",
-        phone= "+49123456789"
-    )
-]
 @customers_router.get("", tags=["customers"])
-async def get_customers() -> list[CustomerRead]:
+async def get_customers(session: SessionDep) -> list[CustomerRead]:
+    customers = session.exec(select(Customer)).all()
     return customers
+
+@customers_router.post("", tags=["customers"], status_code=status.HTTP_201_CREATED,)
+async def create_customer(customer: CustomerCreate, session:SessionDep) -> CustomerRead:
+    db_customer = Customer.model_validate(customer)
+    session.add(db_customer)
+    session.commit()
+    session.refresh(db_customer)
+    return db_customer
