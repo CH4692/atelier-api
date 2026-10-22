@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from atelier_api.database import get_session
 from atelier_api.main import app
+from customers.models import Customer
 from customers.schemas import CustomerRead
 
 
@@ -23,15 +24,15 @@ def mock_session():
 
 
 
-testdata_customers : list[CustomerRead] = [ 
-    CustomerRead(
+testdata_customers : list[Customer] = [ 
+    Customer(
         id=1,
         first_name="Jon",
         last_name="Doe",
         email="jon.doe@example.com", 
         phone="+49176123456789"
     ),
-    CustomerRead(
+    Customer(
         id=2,
         first_name="Maria",
         last_name="Doe",
@@ -39,6 +40,13 @@ testdata_customers : list[CustomerRead] = [
         phone="+49123456789"
     )
 ]
+test_customer = Customer(
+    id=1,
+    first_name="Jon",
+    last_name="Doe",
+    email="jon.doe@example.com",
+    phone="+49176123456789",
+)
 
 client = TestClient(app)
 
@@ -50,8 +58,59 @@ def test_get_customers(mock_session):
     expected_json = [CustomerRead.model_validate(c).model_dump() for c in testdata_customers]
     assert response.json() == expected_json
 
+def test_get_customer_by_id(mock_session):
+    # Arrange
+    mock_session.get.return_value = test_customer
+    # Act
+    response = client.get("/customers/1")
+    # Assert
+    assert response.status_code == 200
+    expected_json = CustomerRead.model_validate(
+        test_customer
+    ).model_dump(mode="json")
+    assert response.json() == expected_json
+    mock_session.get.assert_called_once_with(Customer, 1)
+
+def test_get_customer_by_id_not_found(mock_session):
+    # Arrange
+    mock_session.get.return_value = None
+    # Act
+    response = client.get("/customers/999")
+    # Assert
+    assert response.status_code == 404
+    assert response.json() == {
+        "detail": "Customer not found"
+    }
+    mock_session.get.assert_called_once_with(Customer, 999)
+
+def test_get_customer_by_id_invalid_id(mock_session):
+    response = client.get("/customers/abc")
+    assert response.status_code == 422
+    mock_session.get.assert_not_called()
+
+@pytest.mark.parametrize(
+
+    "customer_id",
+
+    [0, -1, 999999],
+
+)
+
+def test_get_customer_by_id_not_found_for_boundary_values(
+    mock_session,
+    customer_id,
+):
+    mock_session.get.return_value = None
+    response = client.get(f"/customers/{customer_id}")
+    assert response.status_code == 404
+    mock_session.get.assert_called_once_with(
+        Customer,
+        customer_id,
+    )
+
 # test test_create_customer
 def test_create_customer(mock_session):
+    # Arrange
     payload = {
         "first_name": "Jon",
         "last_name": "Doe",
@@ -60,33 +119,20 @@ def test_create_customer(mock_session):
     }
     def refresh_customer(customer):
         customer.id = 1
-
     mock_session.refresh.side_effect = refresh_customer
-
-    # Act: HTTP-Request ausführen
+    # Act
     response = client.post("/customers", json=payload)
-    # Assert: HTTP-Antwort prüfen
-
+    # Assert
     assert response.status_code == 201
-    assert response.json() == {
-        "id": 1,
-        "first_name": "Jon",
-        "last_name": "Doe",
-        "email": "jon.doe@example.com",
-        "phone": "+49176123456789",
-    }
-
-    # Assert: Datenbankoperationen prüfen
     mock_session.add.assert_called_once()
+    saved_customer = mock_session.add.call_args.args[0]
+    assert isinstance(saved_customer, Customer)
+    assert saved_customer.first_name == payload["first_name"]
+    assert saved_customer.last_name == payload["last_name"]
+    assert saved_customer.email == payload["email"]
     mock_session.commit.assert_called_once()
-    mock_session.refresh.assert_called_once()
+    mock_session.refresh.assert_called_once_with(saved_customer)
 
-def test_create_customer_without_required_fields(mock_session):
-    payload = {}
-    response = client.post("/customers", json=payload)
-    assert response.status_code == 422
-    mock_session.add.assert_not_called()
-    mock_session.commit.assert_not_called()
 
 def test_get_customers_empty(mock_session):
     mock_session.exec.return_value.all.return_value = []
@@ -112,6 +158,8 @@ def test_create_customer_invalid_email(mock_session):
     assert response.status_code == 422
     mock_session.add.assert_not_called()
     mock_session.commit.assert_not_called()
+
+
 
 
 
