@@ -1,4 +1,4 @@
-from fastapi import APIRouter, status, HTTPException
+from fastapi import APIRouter, HTTPException, status
 from sqlmodel import select
 
 from atelier_api.database import SessionDep
