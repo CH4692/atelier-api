@@ -1,4 +1,4 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter, status, HTTPException
 from sqlmodel import select
 
 from atelier_api.database import SessionDep
@@ -23,3 +23,13 @@ async def create_customer(customer: CustomerCreate, session:SessionDep) -> Custo
     session.commit()
     session.refresh(db_customer)
     return CustomerRead.model_validate(db_customer)
+
+@customers_router.get("/{customer_id}", tags=["customers"])
+async def get_customer_by_id(customer_id: int, session:SessionDep) -> CustomerRead:
+    customer = session.get(Customer, customer_id)
+    if customer is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Customer not found",
+        )
+    return CustomerRead.model_validate(customer)
