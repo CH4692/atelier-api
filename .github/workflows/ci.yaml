@@ -14,6 +14,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
 
       - name: Install Python
         run: uv python install
@@ -23,6 +25,7 @@ jobs:
 
       - name: Run Lint
         run: make lint
+
   typecheck:
     runs-on: ubuntu-latest
     steps:
@@ -31,6 +34,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
 
       - name: Install Python
         run: uv python install
@@ -43,12 +48,33 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: atelier
+          POSTGRES_PASSWORD: atelier_test
+          POSTGRES_DB: atelier_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U atelier -d atelier_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql+psycopg://atelier:atelier_test@localhost:5432/atelier_test
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
 
       - name: Install uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
 
       - name: Install Python
         run: uv python install
@@ -56,8 +82,12 @@ jobs:
       - name: Install project
         run: uv sync --locked --dev
 
+      - name: Apply database migrations
+        run: make db-migrate
+
       - name: Run Tests
         run: make test
+
   migrations:
     name: Database Migrations
     runs-on: ubuntu-latest
@@ -85,6 +115,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
 
       - name: Install Python
         run: uv python install
