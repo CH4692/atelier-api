@@ -1,8 +1,8 @@
+
 from fastapi import FastAPI
-from contextlib import asynccontextmanager
+
 from customers.router import customers_router
 from health.router import health_router
-from .settings import settings
 
 app = FastAPI()
 

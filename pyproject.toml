@@ -31,6 +31,10 @@ build-backend = "uv_build"
 dev = [
     "httpx2>=2.13.1",
     "mypy>=2.4.0",
+    "pydantic>=2.14.1",
     "pytest>=9.1.1",
     "ruff>=0.17.1",
 ]
+
+[tool.mypy]
+plugins = ["pydantic.mypy"]

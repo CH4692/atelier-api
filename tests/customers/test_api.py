@@ -1,11 +1,12 @@
-from fastapi.testclient import TestClient
-from unittest.mock import patch
 from unittest.mock import MagicMock
-from atelier_api.database import get_session 
-from atelier_api.main import app
-from customers.schemas import CustomerRead, CustomerCreate
 
 import pytest
+from fastapi.testclient import TestClient
+
+from atelier_api.database import get_session
+from atelier_api.main import app
+from customers.schemas import CustomerRead
+
 
 # 1. Erstelle eine Fixture für die Mock-Datenbank-Session
 @pytest.fixture

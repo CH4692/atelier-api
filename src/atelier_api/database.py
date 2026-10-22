@@ -1,6 +1,8 @@
-from sqlmodel import create_engine, Session
 from typing import Annotated
+
 from fastapi import Depends
+from sqlmodel import Session, create_engine
+
 from atelier_api.settings import settings
 
 engine = create_engine(settings.database_url)
