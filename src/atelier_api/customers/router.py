@@ -1,6 +1,6 @@
-"""Expose customer creation, retrieval and partial updates over HTTP."""
+"""Expose customer creation, retrieval, partial updates and deletion over HTTP."""
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Response, status
 from sqlmodel import select
 
 from atelier_api.database import SessionDep
@@ -69,6 +69,44 @@ async def get_customer_by_id(customer_id: int, session: SessionDep) -> CustomerR
             detail="Customer not found",
         )
     return CustomerRead.model_validate(customer)
+
+
+@customers_router.delete(
+    "/{customer_id}",
+    tags=["customers"],
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    summary="Delete a customer",
+    responses={
+        404: {"description": "Customer not found"},
+        503: {"description": "Database unavailable"},
+    },
+)
+def delete_customer(customer_id: int, session: SessionDep) -> Response:
+    """Permanently delete a customer and return an empty response.
+
+    Deletion is committed before responding. Repeating the request for the
+    deleted identifier returns 404.
+
+    Args:
+        customer_id: The identifier of the customer to delete.
+        session: The database session provided for this request.
+
+    Returns:
+        HTTP 204 with no response body after successful deletion.
+
+    Raises:
+        HTTPException: With status 404 if the customer does not exist.
+    """
+    customer = session.get(Customer, customer_id)
+    if customer is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Customer not found",
+        )
+    session.delete(customer)
+    session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @customers_router.patch(

@@ -39,8 +39,9 @@ Aktuell sind folgende Endpunkte implementiert:
 | `GET`   | `/customers/{customer_id}` | Gibt einen Kunden zurück; `404` falls nicht vorhanden |
 | `POST`  | `/customers`               | Legt einen Kunden an; `201` bei Erfolg                |
 | `PATCH` | `/customers/{customer_id}` | Ändert angegebene Kundendaten; `200`, bei unbekannter ID `404` |
+| `DELETE` | `/customers/{customer_id}` | Löscht einen Kunden dauerhaft; `204` ohne Inhalt, bei unbekannter ID `404` |
 
-**Aktuelles Kundenmodell:** numerische ID, Vorname, Nachname, E-Mail-Adresse und optionale Telefonnummer. Kundendaten können teilweise aktualisiert werden. Löschen, Suche, Filter und Pagination sind noch nicht implementiert.
+**Aktuelles Kundenmodell:** numerische ID, Vorname, Nachname, E-Mail-Adresse und optionale Telefonnummer. Kundendaten können teilweise aktualisiert werden. Kunden können dauerhaft gelöscht werden. Suche, Filter und Pagination sind noch nicht implementiert.
 
 ### Kundendaten aktualisieren
 
@@ -53,6 +54,16 @@ curl --fail-with-body -X PATCH http://127.0.0.1:8000/customers/1 \
 ```
 
 Nicht angegebene Felder bleiben unverändert. `phone: null` entfernt die Telefonnummer. Vorname, Nachname und E-Mail dürfen nicht `null` sein; Namen werden getrimmt und dürfen nicht leer sein. E-Mail-Adressen werden validiert. Unbekannte Felder (einschließlich `id`) werden mit HTTP 422 abgewiesen. Ein leerer JSON-Body `{}` liefert den vorhandenen Kunden unverändert zurück. Eine unbekannte Kunden-ID ergibt HTTP 404. Request- und Antwortschema sind unter `/docs` dokumentiert.
+
+### Kunden löschen
+
+`DELETE /customers/{customer_id}` löscht den Kunden dauerhaft aus der Datenbank. Nach erfolgreichem Commit liefert die API HTTP 204 ohne Antwortinhalt. Der Kunde erscheint nicht mehr in der Kundenliste; ein anschließender Abruf oder erneutes Löschen liefert HTTP 404 mit `Customer not found`. Ungültige ID-Formate liefern HTTP 422. Andere Kunden bleiben unverändert.
+
+```bash
+curl --fail-with-body -i -X DELETE http://127.0.0.1:8000/customers/1
+```
+
+Der Endpunkt benötigt keinen Request-Body und ist unter `/docs` dokumentiert. Das aktuelle Datenmodell besitzt keine Beziehungen zu anderen Tabellen; es werden keine Archivierung oder kaskadierenden Löschungen implementiert.
 
 **Wichtige offene Befunde der Bestandsaufnahme:**
 

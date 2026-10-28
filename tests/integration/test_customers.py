@@ -78,3 +78,51 @@ def test_invalid_customer_is_not_persisted(postgres_client):
     )
     assert response.status_code == 422
     assert postgres_client.get("/customers").json() == []
+
+
+def test_delete_customer_removes_record_and_preserves_other_customers(
+    postgres_client, db_connection
+):
+    created = []
+    for name in ("Jon", "Maria"):
+        response = postgres_client.post(
+            "/customers",
+            json={
+                "first_name": name,
+                "last_name": "Doe",
+                "email": f"{name.lower()}@example.com",
+            },
+        )
+        assert response.status_code == 201
+        created.append(response.json())
+    deleted, retained = created
+    path = f"/customers/{deleted['id']}"
+
+    response = postgres_client.delete(path)
+    assert response.status_code == 204
+    assert response.content == b""
+
+    # A fresh session must observe the delete, independently of the API identity map.
+    with Session(
+        bind=db_connection, join_transaction_mode="create_savepoint"
+    ) as session:
+        assert session.get(Customer, deleted["id"]) is None
+        assert session.get(Customer, retained["id"]) is not None
+
+    response = postgres_client.get(path)
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Customer not found"}
+    response = postgres_client.get("/customers")
+    assert response.status_code == 200
+    assert response.json() == [retained]
+    response = postgres_client.delete(path)
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Customer not found"}
+    assert postgres_client.get("/customers").json() == [retained]
+
+
+def test_delete_unknown_customer_does_not_change_database(postgres_client):
+    response = postgres_client.delete("/customers/999999")
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Customer not found"}
+    assert postgres_client.get("/customers").json() == []
