@@ -121,3 +121,60 @@ def test_register_instrument_is_documented_in_openapi():
     assert operation["responses"]["201"]["content"]["application/json"]["schema"][
         "$ref"
     ].endswith("/InstrumentRead")
+
+
+def test_list_instruments_returns_schema_fields(client, mock_session):
+    mock_session.exec.return_value.all.return_value = [
+        Instrument(
+            id=1,
+            type=InstrumentType.VIOLIN,
+            maker="Example maker",
+            year_of_manufacture=1920,
+            identification_number="LABEL-42",
+            notes="Repaired top.",
+            customer_id=7,
+        ),
+        Instrument(id=2, type=InstrumentType.CELLO),
+    ]
+    response = client.get("/instruments")
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "id": 1,
+            "type": "violin",
+            "maker": "Example maker",
+            "year_of_manufacture": 1920,
+            "identification_number": "LABEL-42",
+            "notes": "Repaired top.",
+            "customer_id": 7,
+        },
+        {
+            "id": 2,
+            "type": "cello",
+            "maker": None,
+            "year_of_manufacture": None,
+            "identification_number": None,
+            "notes": None,
+            "customer_id": None,
+        },
+    ]
+    mock_session.exec.assert_called_once()
+    mock_session.commit.assert_not_called()
+
+
+def test_list_instruments_accepts_empty_list(client, mock_session):
+    mock_session.exec.return_value.all.return_value = []
+    response = client.get("/instruments")
+    assert response.status_code == 200
+    assert response.json() == []
+    mock_session.commit.assert_not_called()
+
+
+def test_list_instruments_is_documented_as_array_in_openapi():
+    operation = app.openapi()["paths"]["/instruments"]["get"]
+    assert operation["summary"] == "List registered instruments"
+    assert operation["tags"] == ["instruments"]
+    schema = operation["responses"]["200"]["content"]["application/json"]["schema"]
+    assert schema["type"] == "array"
+    assert schema["items"]["$ref"].endswith("/InstrumentRead")
+    assert "503" in operation["responses"]

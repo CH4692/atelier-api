@@ -41,6 +41,7 @@ Aktuell sind folgende Endpunkte implementiert:
 | `PATCH` | `/customers/{customer_id}` | Ändert angegebene Kundendaten; `200`, bei unbekannter ID `404` |
 | `DELETE` | `/customers/{customer_id}` | Löscht einen Kunden dauerhaft; `204` ohne Inhalt, bei unbekannter ID `404` |
 | `POST` | `/instruments` | Registriert ein Instrument; `201`, bei unbekanntem Kunden `404` |
+| `GET` | `/instruments` | Liefert alle registrierten Instrumente als Liste; `200`, auch bei leerer Liste |
 
 **Aktuelles Kundenmodell:** numerische ID, Vorname, Nachname, E-Mail-Adresse und optionale Telefonnummer. Kundendaten können teilweise aktualisiert werden. Kunden können dauerhaft gelöscht werden. Suche, Filter und Pagination sind noch nicht implementiert.
 
@@ -90,6 +91,14 @@ make db-check
 ```
 
 Ein Downgrade dieser Revision entfernt die Instrumenttabelle einschließlich ihrer Daten; die Kundentabelle bleibt erhalten.
+
+### Instrumente auflisten
+
+`GET /instruments` liefert HTTP 200 und eine JSON-Liste mit dem Antwortschema `list[InstrumentRead]`. Jeder Eintrag enthält ID, Typ, Hersteller, Baujahr, Identifikationsnummer, Notizen und die optionale Kunden-ID. Unzugeordnete Instrumente werden ebenfalls angezeigt. Sind keine Instrumente vorhanden, ist die Antwort `[]`. Eine Sortierreihenfolge oder Pagination ist noch nicht festgelegt. Der Endpunkt erscheint unter `/docs`.
+
+```bash
+curl --fail http://127.0.0.1:8000/instruments
+```
 
 ### Instrument registrieren
 
@@ -485,7 +494,7 @@ Jeder Testlauf erzeugt ein Schema mit zufälligem Namen und wendet darin `alembi
 
 Jeder API-Aufruf erhält eine eigene Session mit Savepoint innerhalb einer äußeren Testtransaktion. Am Testende wird die äußere Transaktion zurückgerollt, auch wenn der Endpunkt `session.commit()` aufgerufen hat. Eine zusätzliche Prüfung bestätigt nach jedem Test, dass keine Kunden- oder Instrumentdaten zurückbleiben. Am Ende des Testlaufs wird ausschließlich das eigens erzeugte Schema entfernt. Die Suite ist für sequenzielle Ausführung eingerichtet.
 
-Die Tests unter `tests/instruments/` validieren Instrument-Schemas sowie den POST-Endpunkt einschließlich Validierungsfehlern und unbekannten Kunden. `tests/integration/test_instrument_api.py` prüft die Registrierung über HTTP und das erneute Lesen aus PostgreSQL über eine frische Session. `tests/integration/test_instruments.py` prüft die Speicherung aller Instrumentfelder, die Kundenzuordnung, mehrere Instrumente pro Kunde, ungültige Fremdschlüssel und Datenbankwerte sowie den Erhalt von Instrumenten beim Löschen eines Kunden. Nach jedem Test wird zusätzlich geprüft, dass keine Instrumentdaten zurückbleiben.
+Die Tests unter `tests/instruments/` validieren Instrument-Schemas sowie die POST- und GET-Endpunkte einschließlich leerer Listen, Validierungsfehlern und unbekannten Kunden. `tests/integration/test_instrument_api.py` prüft die Registrierung über HTTP, das erneute Lesen aus PostgreSQL über eine frische Session und die Liste gespeicherter Instrumente. `tests/integration/test_instruments.py` prüft die Speicherung aller Instrumentfelder, die Kundenzuordnung, mehrere Instrumente pro Kunde, ungültige Fremdschlüssel und Datenbankwerte sowie den Erhalt von Instrumenten beim Löschen eines Kunden. Nach jedem Test wird zusätzlich geprüft, dass keine Instrumentdaten zurückbleiben.
 
 | Make-Befehl | Direkter Aufruf |
 | --- | --- |
