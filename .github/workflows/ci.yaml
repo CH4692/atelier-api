@@ -97,6 +97,7 @@ jobs:
 
     env:
       DATABASE_URL: postgresql+psycopg://atelier:atelier_test@localhost:5432/atelier_test
+      TEST_DATABASE_URL: postgresql+psycopg://atelier:atelier_test@localhost:5432/atelier_test
 
     steps:
       - name: Checkout repository
@@ -116,8 +117,11 @@ jobs:
       - name: Apply database migrations
         run: make db-migrate
 
-      - name: Run Tests
-        run: make test
+      - name: Run unit and configuration tests
+        run: uv run pytest --ignore=tests/integration
+
+      - name: Run PostgreSQL integration tests
+        run: uv run pytest tests/integration -v
 
   migrations:
     name: Database Migrations

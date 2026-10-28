@@ -46,7 +46,7 @@ Aktuell sind folgende Endpunkte implementiert:
 - **Hoch:** Authentifizierung und Autorisierung fehlen; keine echten Kundendaten in einer öffentlich erreichbaren Instanz verwenden.
 - **Mittel:** Synchrone Datenbankaufrufe innerhalb von `async def`-Routen.
 - **Mittel:** Fehlende Pagination, Sortierung und stärkere Eingabevalidierung.
-- **Mittel:** Kunden-API-Tests verwenden Mocks statt einer echten PostgreSQL-Testdatenbank.
+- **Mittel:** Beziehungstests stehen aus, bis das Datenmodell Beziehungen zwischen Tabellen enthält.
 - **Mittel:** Eine Konfiguration für den produktiven Betrieb steht noch aus.
 
 Die Anwendungsmodule einschließlich `customers` und `health` werden gemeinsam als Paket `atelier_api` ausgeliefert. Der CLI-Einstiegspunkt lautet `atelier_api.cli:main`. Die CI prüft Lint, Typen, Tests, Datenbankmigrationen sowie die Installation und Imports des gebauten Wheels in einer separaten Umgebung.
@@ -207,7 +207,7 @@ Wichtige Regeln:
 - [x] CLI-Einstiegspunkt reparieren.
 - [x] Lokale Einrichtung, Migrationen und Testausführung dokumentieren.
 - [ ] Authentifizierung und Berechtigungen implementieren.
-- [ ] PostgreSQL-Integrationstests und reproduzierbare Testdatenbank einrichten.
+- [x] PostgreSQL-Integrationstests für Kunden und Migrationen mit isolierten Testdaten einrichten.
 - [ ] Backup-, Restore- und Fehlerprotokollierungsstrategie festlegen.
 - [ ] Datenbankzugriff konsistent gestalten (z. B. synchrone Routen bei synchronem Treiber).
 
@@ -382,7 +382,24 @@ make lint
 make typecheck
 ```
 
-Kunden-API-Tests verwenden derzeit gemockte Sessions. Der Readiness-Test benötigt eine echte erreichbare Datenbank. Für künftige Integrationstests die Trennung zwischen Entwicklungs- und Testdatenbank beibehalten.
+Die bisherigen Kunden-API-Tests verwenden gemockte Sessions. Zusätzlich prüfen die Tests unter `tests/integration/` echte PostgreSQL-Zugriffe. Der Readiness-Test benötigt ebenfalls eine erreichbare Datenbank.
+
+#### PostgreSQL-Integrationstests
+
+`TEST_DATABASE_URL` muss ausdrücklich gesetzt werden und auf eine PostgreSQL-Datenbank zeigen, deren Name auf `_test` endet. Die Datenbank muss bereits existieren; der Benutzer benötigt Rechte zum Erstellen und Löschen eigener Schemas. Niemals eine Produktionsdatenbank verwenden.
+
+```bash
+TEST_DATABASE_URL=postgresql+psycopg://atelier:atelier_local@localhost:5432/atelier_test \
+  uv run pytest tests/integration -v
+```
+
+Ohne `TEST_DATABASE_URL` werden nur die Integrationstests mit einem Hinweis übersprungen. Eine gesetzte, aber ungeeignete URL oder nicht erreichbare Testdatenbank führt zu einem Fehler. `DATABASE_URL` bleibt für das Laden der Anwendung erforderlich und kann lokal aus `.env` stammen. `TEST_DATABASE_URL` wird ausschließlich von den Test-Fixtures gelesen.
+
+Jeder Testlauf erzeugt ein Schema mit zufälligem Namen und wendet darin `alembic upgrade head` auf ein leeres Schema an; `create_all()` wird nicht verwendet. Geprüft werden der erreichte Migrationsstand, die Kundentabelle, das Anlegen und Auslesen über API und frische Sessions, optionale Telefonnummern, ungültige Eingaben und fehlende Kunden.
+
+Jeder API-Aufruf erhält eine eigene Session mit Savepoint innerhalb einer äußeren Testtransaktion. Am Testende wird die äußere Transaktion zurückgerollt, auch wenn der Endpunkt `session.commit()` aufgerufen hat. Eine zusätzliche Prüfung bestätigt nach jedem Test, dass keine Kundendaten zurückbleiben. Am Ende des Testlaufs wird ausschließlich das eigens erzeugte Schema entfernt. Die Suite ist für sequenzielle Ausführung eingerichtet.
+
+**Noch offen: Beziehungen zwischen Tabellen.** Das aktuelle Datenmodell enthält ausschließlich `Customer` und keine Fremdschlüssel oder ORM-Beziehungen. Beziehungstests können deshalb erst mit einem entsprechenden fachlichen Modell ergänzt werden; das zugehörige Abnahmekriterium ist noch nicht erfüllt.
 
 | Make-Befehl | Direkter Aufruf |
 | --- | --- |
@@ -391,7 +408,7 @@ Kunden-API-Tests verwenden derzeit gemockte Sessions. Der Readiness-Test benöti
 | `make lint-fix` | `uv run ruff check . --fix` (ändert Dateien) |
 | `make typecheck` | `uv run mypy src` |
 
-Die GitHub-Actions-CI startet PostgreSQL 17 für Tests und Migrationsprüfungen und wendet Migrationen vor den Tests an. Ein eigener Job baut und installiert das Wheel in einer frischen Umgebung und prüft die Anwendung außerhalb des Quellcodeverzeichnisses.
+Die GitHub-Actions-CI startet PostgreSQL 17 für Tests und Migrationsprüfungen und wendet Migrationen vor den Tests an. Der Test-Job setzt `TEST_DATABASE_URL` und führt die Integrationstests in einem eigenen Schritt aus; deren Fixtures prüfen zusätzlich Migrationen in einem leeren Schema. Ein eigener Job baut und installiert das Wheel in einer frischen Umgebung und prüft die Anwendung außerhalb des Quellcodeverzeichnisses.
 
 ### 8.7 Paket bauen
 
