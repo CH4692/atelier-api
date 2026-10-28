@@ -38,8 +38,21 @@ Aktuell sind folgende Endpunkte implementiert:
 | `GET`   | `/customers`               | Gibt derzeit alle Kunden ohne Pagination zurück       |
 | `GET`   | `/customers/{customer_id}` | Gibt einen Kunden zurück; `404` falls nicht vorhanden |
 | `POST`  | `/customers`               | Legt einen Kunden an; `201` bei Erfolg                |
+| `PATCH` | `/customers/{customer_id}` | Ändert angegebene Kundendaten; `200`, bei unbekannter ID `404` |
 
-**Aktuelles Kundenmodell:** numerische ID, Vorname, Nachname, E-Mail-Adresse und optionale Telefonnummer. Bearbeiten, Löschen, Suche, Filter und Pagination sind noch nicht implementiert.
+**Aktuelles Kundenmodell:** numerische ID, Vorname, Nachname, E-Mail-Adresse und optionale Telefonnummer. Kundendaten können teilweise aktualisiert werden. Löschen, Suche, Filter und Pagination sind noch nicht implementiert.
+
+### Kundendaten aktualisieren
+
+`PATCH /customers/{customer_id}` aktualisiert nur die übergebenen Felder und liefert den vollständigen aktualisierten Kunden zurück. Die ID wird ausschließlich im Pfad angegeben. Beispiel bei laufendem Entwicklungsserver:
+
+```bash
+curl --fail-with-body -X PATCH http://127.0.0.1:8000/customers/1 \
+  -H 'Content-Type: application/json' \
+  -d '{"first_name":"Maria","email":"maria@example.com","phone":null}'
+```
+
+Nicht angegebene Felder bleiben unverändert. `phone: null` entfernt die Telefonnummer. Vorname, Nachname und E-Mail dürfen nicht `null` sein; Namen werden getrimmt und dürfen nicht leer sein. E-Mail-Adressen werden validiert. Unbekannte Felder (einschließlich `id`) werden mit HTTP 422 abgewiesen. Ein leerer JSON-Body `{}` liefert den vorhandenen Kunden unverändert zurück. Eine unbekannte Kunden-ID ergibt HTTP 404. Request- und Antwortschema sind unter `/docs` dokumentiert.
 
 **Wichtige offene Befunde der Bestandsaufnahme:**
 
@@ -375,6 +388,8 @@ curl --fail http://127.0.0.1:8000/health/ready
 
 ### 8.6 Tests, Lint und Typprüfung
 
+Die verbindlichen Python-, Docstring- und API-Dokumentationsregeln stehen in [AGENTS.md](AGENTS.md). Code-Dokumentation verwendet Englisch und Google-Style-Docstrings; Ruff prüft deren Format und sinnvolle Abschnittsstruktur. Historische Migrationen werden nicht für Formatierungsänderungen umgeschrieben. Die initiale Revision enthält ausschließlich eine Importkorrektur für die Typprüfung; Schema und erzeugtes SQL bleiben unverändert.
+
 Tests gegen die separate Datenbank `atelier_test` ausführen. Das folgende Beispiel verwendet das lokale Docker-Passwort; bei eigener Installation entsprechend anpassen:
 
 ```bash
@@ -408,7 +423,9 @@ Jeder API-Aufruf erhält eine eigene Session mit Savepoint innerhalb einer äuß
 | `make test` | `uv run pytest` |
 | `make lint` | `uv run ruff check .` |
 | `make lint-fix` | `uv run ruff check . --fix` (ändert Dateien) |
-| `make typecheck` | `uv run mypy src` |
+| `make typecheck` | `uv run mypy .` |
+| `make format-check` | `uv run ruff format --check .` |
+| `make format` | `uv run ruff format .` (ändert Dateien) |
 
 Die GitHub-Actions-CI startet PostgreSQL 17 für Tests und Migrationsprüfungen und wendet Migrationen vor den Tests an. Der Test-Job setzt `TEST_DATABASE_URL` und führt die Integrationstests in einem eigenen Schritt aus; deren Fixtures prüfen zusätzlich Migrationen in einem leeren Schema. Ein eigener Job baut und installiert das Wheel in einer frischen Umgebung und prüft die Anwendung außerhalb des Quellcodeverzeichnisses.
 

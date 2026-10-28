@@ -8,6 +8,7 @@ from pathlib import Path
 
 
 def main() -> None:
+    """Verify installed modules, OpenAPI routes, liveness and the CLI target."""
     package = distribution("atelier-api")
     # Check every shipped application module, including the nested packages.
     for file in package.files or []:
@@ -24,7 +25,12 @@ def main() -> None:
     from atelier_api.main import app
 
     routes = set(app.openapi()["paths"])
-    assert {"/customers", "/customers/{customer_id}", "/health/live", "/health/ready"} <= routes
+    assert {
+        "/customers",
+        "/customers/{customer_id}",
+        "/health/live",
+        "/health/ready",
+    } <= routes
     with TestClient(app) as client:
         response = client.get("/health/live")
         assert response.status_code == 200
