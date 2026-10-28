@@ -151,6 +151,8 @@ Kennzeichnung: **MVP** = für den ersten nutzbaren Pilotablauf vorgesehen; **Pha
 
 ### Architektur und Verzeichnisstruktur
 
+Die verbindlichen Regeln für Feature-Module, gemeinsame Dependencies, Services und Imports stehen in [Modulstruktur und Architektur](docs/architecture.md). Neue Features folgen dem dort beschriebenen Muster.
+
 Der Datenfluss ist `HTTP/JSON → FastAPI-Router → Datenbank-Session → SQLModel/SQLAlchemy → PostgreSQL`.
 
 ```text
