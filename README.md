@@ -40,6 +40,7 @@ Aktuell sind folgende Endpunkte implementiert:
 | `POST`  | `/customers`               | Legt einen Kunden an; `201` bei Erfolg                |
 | `PATCH` | `/customers/{customer_id}` | Ändert angegebene Kundendaten; `200`, bei unbekannter ID `404` |
 | `DELETE` | `/customers/{customer_id}` | Löscht einen Kunden dauerhaft; `204` ohne Inhalt, bei unbekannter ID `404` |
+| `POST` | `/instruments` | Registriert ein Instrument; `201`, bei unbekanntem Kunden `404` |
 
 **Aktuelles Kundenmodell:** numerische ID, Vorname, Nachname, E-Mail-Adresse und optionale Telefonnummer. Kundendaten können teilweise aktualisiert werden. Kunden können dauerhaft gelöscht werden. Suche, Filter und Pagination sind noch nicht implementiert.
 
@@ -67,7 +68,7 @@ Der Endpunkt benötigt keinen Request-Body und ist unter `/docs` dokumentiert. Z
 
 ### Instrumentmodell
 
-Das Feature `atelier_api.instruments` enthält das Tabellenmodell `Instrument` sowie `InstrumentCreate` und `InstrumentRead`. Ein HTTP-Endpunkt für Instrumente ist noch nicht implementiert.
+Das Feature `atelier_api.instruments` enthält das Tabellenmodell `Instrument` sowie `InstrumentCreate` und `InstrumentRead`. `POST /instruments` registriert Instrumente über einen validierten JSON-Request und liefert den vollständigen gespeicherten Datensatz einschließlich ID zurück.
 
 | Feld | Bedeutung / Validierung |
 | --- | --- |
@@ -89,6 +90,19 @@ make db-check
 ```
 
 Ein Downgrade dieser Revision entfernt die Instrumenttabelle einschließlich ihrer Daten; die Kundentabelle bleibt erhalten.
+
+### Instrument registrieren
+
+Nach Anwendung der Migrationen akzeptiert `POST /instruments` beispielsweise:
+
+```bash
+curl --fail-with-body -X POST http://127.0.0.1:8000/instruments \
+  -H 'Content-Type: application/json' \
+  -d '{"type":"violin","maker":"Example maker","year_of_manufacture":1920,"identification_number":"LABEL-42","notes":"Reparierte Decke.","customer_id":1}'
+```
+
+`customer_id` muss auf einen bereits vorhandenen Kunden verweisen. Für Werkstattbestand kann das Feld entfallen oder `null` sein. Ein unbekannter Kunde ergibt HTTP 404 mit `Customer not found`; ungültige Felder, fehlender Typ oder eine ungültige Kunden-ID wie `0` ergeben HTTP 422. Bei Erfolg wird der Datensatz vor der Antwort gespeichert und mit HTTP 201 einschließlich automatisch vergebener `id` und aller optionalen Felder zurückgegeben. Es wird kein Kunde automatisch angelegt. Request- und Antwortschema sowie Fehlerantworten sind unter `/docs` dokumentiert.
+
 
 **Wichtige offene Befunde der Bestandsaufnahme:**
 
@@ -210,7 +224,7 @@ src/atelier_api/
 ├── settings.py       # Konfiguration aus Umgebung und .env
 ├── database.py       # Engine und Session pro Anfrage
 ├── customers/        # Kunden-Router, API-Schemas und Tabellenmodell
-├── instruments/      # Instrumentmodell und Schemas, noch ohne HTTP-Router
+├── instruments/      # Instrument-Router, Tabellenmodell und Schemas
 └── health/           # Liveness und Datenbank-Readiness
 alembic/              # Migrationskonfiguration und versionierte Schemaänderungen
 tests/                # API- und Schema-Tests
@@ -471,7 +485,7 @@ Jeder Testlauf erzeugt ein Schema mit zufälligem Namen und wendet darin `alembi
 
 Jeder API-Aufruf erhält eine eigene Session mit Savepoint innerhalb einer äußeren Testtransaktion. Am Testende wird die äußere Transaktion zurückgerollt, auch wenn der Endpunkt `session.commit()` aufgerufen hat. Eine zusätzliche Prüfung bestätigt nach jedem Test, dass keine Kunden- oder Instrumentdaten zurückbleiben. Am Ende des Testlaufs wird ausschließlich das eigens erzeugte Schema entfernt. Die Suite ist für sequenzielle Ausführung eingerichtet.
 
-Die Tests unter `tests/instruments/` validieren Instrument-Schemas. `tests/integration/test_instruments.py` prüft die Speicherung aller Instrumentfelder, die Kundenzuordnung, mehrere Instrumente pro Kunde, ungültige Fremdschlüssel und Datenbankwerte sowie den Erhalt von Instrumenten beim Löschen eines Kunden. Nach jedem Test wird zusätzlich geprüft, dass keine Instrumentdaten zurückbleiben.
+Die Tests unter `tests/instruments/` validieren Instrument-Schemas sowie den POST-Endpunkt einschließlich Validierungsfehlern und unbekannten Kunden. `tests/integration/test_instrument_api.py` prüft die Registrierung über HTTP und das erneute Lesen aus PostgreSQL über eine frische Session. `tests/integration/test_instruments.py` prüft die Speicherung aller Instrumentfelder, die Kundenzuordnung, mehrere Instrumente pro Kunde, ungültige Fremdschlüssel und Datenbankwerte sowie den Erhalt von Instrumenten beim Löschen eines Kunden. Nach jedem Test wird zusätzlich geprüft, dass keine Instrumentdaten zurückbleiben.
 
 | Make-Befehl | Direkter Aufruf |
 | --- | --- |
