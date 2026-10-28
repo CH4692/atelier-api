@@ -71,11 +71,14 @@ uv run pytest
 
 `make lint`, `make format-check`, `make typecheck` and `make test` are equivalent.
 `make format` applies formatting. API tests use shared TestClient and mocked-session
-fixtures and need no running database. Without an exported `DATABASE_URL`, pytest
-sets an import-only SQLite URL before loading the application. To include real
-PostgreSQL tests, set `TEST_DATABASE_URL` to a dedicated database ending in `_test`;
-the integration fixtures create and migrate a disposable schema. Without this
-variable, integration tests are explicitly skipped.
+fixtures and need no running database. pytest loads the repository .env before
+application imports, preserving explicit environment variables such as CI settings.
+Local application and integration connections use Neon when configured there.
+Set TEST_DATABASE_URL in .env to a direct connection to a dedicated database ending
+in _test; the integration fixtures create and migrate a disposable schema. Only
+when DATABASE_URL is absent from both sources is an import-only SQLite URL used.
+Missing TEST_DATABASE_URL skips integration tests; an unreachable configured
+database fails rather than falling back to local PostgreSQL or SQLite.
 Also verify application imports and OpenAPI generation after API documentation edits.
 
 The repository checks application code, tests, scripts and migrations with

@@ -1,19 +1,22 @@
-"""Provide deterministic API tests without depending on a developer's database."""
+"""Provide isolated API tests and load local database configuration."""
 
 import os
 from collections.abc import Iterator
 from unittest.mock import MagicMock
 
 import pytest
+from dotenv import load_dotenv
 from fastapi.testclient import TestClient
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    """Provide an import-only database URL before test modules load the app.
+    """Load local database settings before test modules import the application.
 
-    Explicit environment configuration takes precedence. PostgreSQL integration
-    tests connect only through their dedicated TEST_DATABASE_URL fixture.
+    Exported variables, including CI configuration, take precedence over .env.
+    The SQLite fallback only supports imports when no database is configured;
+    PostgreSQL integration tests use TEST_DATABASE_URL exclusively.
     """
+    load_dotenv(dotenv_path=config.rootpath / ".env", override=False)
     os.environ.setdefault("DATABASE_URL", "sqlite://")
 
 

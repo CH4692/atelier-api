@@ -1,6 +1,6 @@
 """Load shared application and migration settings from the environment."""
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError, NoSuchModuleError
@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     """
 
     database_url: str
+    # Accept the local test setting in the shared .env without using it at runtime.
+    test_database_url: str | None = Field(default=None, repr=False)
 
     @field_validator("database_url")
     @classmethod

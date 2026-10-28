@@ -311,6 +311,10 @@ Alle folgenden Projektbefehle werden im Verzeichnis mit `pyproject.toml` und `Ma
 
 ### 8.2 PostgreSQL einrichten
 
+Für die lokale Entwicklung wird Neon im Projekt `atelier`, Branch `dev`, verwendet. Die Anwendungsdatenbank bleibt für Entwicklungsdaten erhalten. Für Tests wird im selben Branch eine getrennte Datenbank `atelier_test` verwendet. Die Verbindungen werden einmalig in `.env` gespeichert; weder ein lokaler PostgreSQL-Server noch ein erneuter Export vor jedem Testlauf sind dann erforderlich. Für Migrationen und Tests die direkte Neon-Verbindung ohne `-pooler` wählen und die TLS-Parameter beibehalten.
+
+Die folgenden lokalen Installations- und Docker-Befehle sind Alternativen; die GitHub-CI verwendet weiterhin ihren eigenen PostgreSQL-Container.
+
 Für eine bereits installierte und laufende lokale PostgreSQL-Instanz: Als PostgreSQL-Administrator einen Benutzer und zwei getrennte Datenbanken anlegen. Bei einer Installation mit dem Administratorkonto `postgres`:
 
 ```bash
@@ -347,17 +351,19 @@ Die Docker-Zugangsdaten sind ausschließlich für die lokale Entwicklung gedacht
 cp .env.example .env
 ```
 
-In `.env` das zuvor vergebene Passwort eintragen. Das Docker-Beispiel passt ohne weitere Anpassung zur Vorlage:
+Die Vorlage enthält Neon-Platzhalter. In einer vorhandenen `.env` die echten Werte lokal behalten und die separate Testverbindung ergänzen:
 
 ```dotenv
-DATABASE_URL=postgresql+psycopg://atelier:atelier_local@localhost:5432/atelier
+DATABASE_URL='postgresql+psycopg://ROLE:PASSWORD@YOUR-ENDPOINT.neon.tech/neondb?sslmode=require&channel_binding=require'
+TEST_DATABASE_URL='postgresql+psycopg://ROLE:PASSWORD@YOUR-ENDPOINT.neon.tech/atelier_test?sslmode=require&channel_binding=require'
 ```
 
 | Variable | Pflicht | Bedeutung |
 | --- | --- | --- |
-| `DATABASE_URL` | Ja | SQLAlchemy-Verbindungs-URL; Format `postgresql+psycopg://BENUTZER:PASSWORT@HOST:PORT/DATENBANK`. Kein Standardwert. |
+| `DATABASE_URL` | Ja | Verbindung der Anwendung und Alembic zur Entwicklungsdatenbank. |
+| `TEST_DATABASE_URL` | Für Integrationstests | Direkte PostgreSQL-Verbindung zur separaten Datenbank mit Endung `_test`. Wird nicht als Anwendungsdatenbank verwendet. |
 
-`postgresql+psycopg` wählt den Psycopg-3-Treiber. `localhost:5432` bezeichnet den Datenbankserver; das letzte `atelier` den Datenbanknamen. Sonderzeichen im Benutzer oder Passwort müssen in der URL prozentkodiert werden, beispielsweise `@` als `%40`.
+`postgresql+psycopg` wählt den Psycopg-3-Treiber. Hostname und Datenbankname stammen aus der Neon-Verbindungsanzeige. Neon-Branch und PostgreSQL-Datenbank sind unterschiedliche Objekte. Die Testdatenbank muss tatsächlich angelegt sein; eine reine Änderung des URL-Pfades reicht nicht. Sonderzeichen im Benutzer oder Passwort müssen in der URL prozentkodiert werden, beispielsweise `@` als `%40`.
 
 Die Anwendung und Alembic lesen `.env` relativ zum aktuellen Arbeitsverzeichnis. Bereits exportierte Umgebungsvariablen überschreiben die Werte aus `.env`. Die lokale `.env` ist in Git ignoriert; eigene Zugangsdaten gehören nicht ins Repository. Die `POSTGRES_*`-Variablen des Docker-Beispiels konfigurieren den Datenbankcontainer und werden von der API selbst nicht gelesen.
 
@@ -433,16 +439,15 @@ make test
 # Gleichwertig: uv run pytest
 ```
 
-Die API-Tests verwenden gemeinsame pytest-Fixtures für FastAPIs `TestClient` und gemockte Datenbank-Sessions. Ohne exportierte `DATABASE_URL` setzen die Tests vor dem Anwendungsimport eine SQLite-URL; diese dient nur der Initialisierung und führt keine SQLite-Datenbanktests aus. Eine lokale `.env` mit PostgreSQL-Zugang ist für die gemockten Tests nicht erforderlich. Vorhandene Dependency-Overrides werden nach jedem Test wiederhergestellt.
+pytest lädt `.env` automatisch vor dem Anwendungsimport. Exportierte Variablen haben Vorrang, sodass die CI ihre Container-Verbindungen verwendet. Lokal werden die Neon-Verbindungen aus `.env` genutzt. Die API-Tests verwenden gemockte Sessions; echte Datenbankoperationen laufen über `TEST_DATABASE_URL`. Nur bei vollständig fehlender `DATABASE_URL` in Umgebung und `.env` gibt es noch eine SQLite-Adresse zur Initialisierung. Vorhandene Dependency-Overrides werden nach jedem Test wiederhergestellt.
 
-Ohne `TEST_DATABASE_URL` laufen API-, Schema- und Konfigurationstests; nur PostgreSQL-Integrationstests werden ausdrücklich übersprungen. Nach Konfiguration der Testdatenbank führt derselbe Befehl auch diese Tests aus:
+Mit `TEST_DATABASE_URL` in `.env` führt der folgende Befehl automatisch auch alle PostgreSQL-Integrationstests aus:
 
 ```bash
-export TEST_DATABASE_URL='postgresql+psycopg://atelier:atelier_local@localhost:5432/atelier_test'
 make test
 ```
 
-Das Beispiel verwendet das lokale Docker-Passwort; bei eigener Installation entsprechend anpassen. Die Datenbank muss bereits existieren. Die Integrationstest-Fixtures wenden Migrationen selbst in einem neuen Schema an; ein manuelles `make db-migrate` ist dafür nicht erforderlich.
+Die in `.env` angegebene Testdatenbank muss bereits existieren. Die Integrationstest-Fixtures wenden Migrationen selbst in einem neuen Schema an; ein manuelles `make db-migrate` ist dafür nicht erforderlich.
 
 | Abdeckung | Testdateien |
 | --- | --- |
@@ -454,14 +459,13 @@ Das Beispiel verwendet das lokale Docker-Passwort; bei eigener Installation ents
 
 #### PostgreSQL-Integrationstests
 
-`TEST_DATABASE_URL` muss ausdrücklich gesetzt werden und auf eine PostgreSQL-Datenbank zeigen, deren Name auf `_test` endet. Die Datenbank muss bereits existieren; der Benutzer benötigt Rechte zum Erstellen und Löschen eigener Schemas. Niemals eine Produktionsdatenbank verwenden.
+`TEST_DATABASE_URL` muss in `.env` oder der Umgebung gesetzt werden und auf eine PostgreSQL-Datenbank zeigen, deren Name auf `_test` endet. Die Datenbank muss bereits existieren; der Benutzer benötigt Rechte zum Erstellen und Löschen eigener Schemas. Niemals eine Produktionsdatenbank verwenden.
 
 ```bash
-TEST_DATABASE_URL=postgresql+psycopg://atelier:atelier_local@localhost:5432/atelier_test \
-  uv run pytest tests/integration -v
+uv run pytest tests/integration -v
 ```
 
-Ohne `TEST_DATABASE_URL` werden nur die Integrationstests mit einem Hinweis übersprungen. Eine gesetzte, aber ungeeignete URL oder nicht erreichbare Testdatenbank führt zu einem Fehler. `TEST_DATABASE_URL` wird ausschließlich von den Test-Fixtures gelesen. Die allgemeine `DATABASE_URL` erhält im Testprozess bei Bedarf den oben beschriebenen Import-Standardwert; außerhalb von pytest bleibt sie für die Anwendung erforderlich.
+Ohne `TEST_DATABASE_URL` werden nur die Integrationstests mit einem Hinweis übersprungen. Eine gesetzte, aber ungeeignete URL oder nicht erreichbare Testdatenbank führt zu einem Fehler. `TEST_DATABASE_URL` wird ausschließlich von den Test-Fixtures gelesen. Die allgemeine `DATABASE_URL` wird ebenfalls aus `.env` geladen; außerhalb von pytest bleibt sie für die Anwendung erforderlich. Bei einer konfigurierten, aber nicht erreichbaren Neon-Testdatenbank wird ein Fehler gemeldet; es gibt keinen automatischen Wechsel auf eine lokale Datenbank.
 
 Jeder Testlauf erzeugt ein Schema mit zufälligem Namen und wendet darin `alembic upgrade head` auf ein leeres Schema an; `create_all()` wird nicht verwendet. Geprüft werden der erreichte Migrationsstand, die Kundentabelle, Health-Readiness sowie der vollständige Ablauf Anlegen → Auflisten/Abrufen → Ändern → Löschen. Frische Sessions bestätigen die gespeicherten Daten; zusätzliche Fälle prüfen optionale Telefonnummern, ungültige Eingaben und fehlende Kunden.
 
