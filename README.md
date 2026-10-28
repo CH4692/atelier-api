@@ -310,6 +310,10 @@ DATABASE_URL=postgresql+psycopg://atelier:atelier_local@localhost:5432/atelier
 
 Die Anwendung und Alembic lesen `.env` relativ zum aktuellen Arbeitsverzeichnis. Bereits exportierte Umgebungsvariablen überschreiben die Werte aus `.env`. Die lokale `.env` ist in Git ignoriert; eigene Zugangsdaten gehören nicht ins Repository. Die `POSTGRES_*`-Variablen des Docker-Beispiels konfigurieren den Datenbankcontainer und werden von der API selbst nicht gelesen.
 
+Die zentralen Settings validieren die URL-Syntax und den SQLAlchemy-Dialekt; PostgreSQL-URLs müssen einen Datenbanknamen enthalten. Konfigurationsfehler zeigen den eingegebenen Wert nicht an. Diese Prüfung baut keine Verbindung auf und prüft weder Passwort noch Erreichbarkeit.
+
+Auch lokale Varianten wie `.env.test` sind in Git ignoriert; automatisch geladen wird ausschließlich `.env`. Andere Konfigurationen über die Umgebung bereitstellen. Nur `.env.example` wird als Vorlage versioniert. Falls echte Zugangsdaten versehentlich eingecheckt wurden, müssen sie ersetzt werden: `.gitignore` entfernt sie nicht aus der Historie.
+
 ### 8.4 Datenbankmigrationen
 
 Vor dem ersten Start und nach dem Übernehmen neuer Migrationen:
@@ -329,6 +333,14 @@ Das führt `uv run alembic upgrade head` aus und legt beim ersten Mal die Kunden
 | Letzte Migration zurücknehmen | `make db-downgrade` |
 
 Automatisch erzeugte Dateien unter `alembic/versions/` vor dem Anwenden prüfen und zusammen mit der Modelländerung committen. Ein Downgrade kann Daten löschen; die initiale Migration entfernt beim Zurücknehmen die gesamte Kundentabelle.
+
+Anwendung sowie Online- und Offline-Migrationen verwenden dieselbe `DATABASE_URL` aus `atelier_api.settings`. In `alembic.ini` wird keine zweite Verbindungs-URL gepflegt. Offline lässt sich SQL ohne laufende Datenbank erzeugen:
+
+```bash
+uv run alembic upgrade head --sql > migration.sql
+```
+
+Dieser Befehl führt das SQL nicht aus. Die Ausgabe vor einer manuellen Anwendung prüfen. Migrationen vor dem Serverstart anwenden; die Anwendung erstellt Tabellen nicht automatisch. Bei einem Online-Verbindungsfehler beendet Alembic den Befehl mit einem Fehlerstatus und einem verständlichen Hinweis auf `DATABASE_URL` und die Datenbankerreichbarkeit, ohne Zugangsdaten auszugeben.
 
 ### 8.5 Entwicklungsserver starten
 
@@ -401,6 +413,8 @@ Das erzeugt Source-Archiv und Wheel unter `dist/`. Die Paketstruktur umfasst `at
 | Readiness-Test erhält 503 | Testdatenbank starten und die Test-URL ausdrücklich wie oben setzen. |
 
 Eine fehlende Datenbankverbindung verhindert nicht zwingend den Serverstart. Liveness prüft nur die Anwendung; Readiness führt eine Datenbankabfrage aus. Ein erfolgreicher Readiness-Check bestätigt nicht, dass alle Migrationen angewendet sind.
+
+Bei Verbindungsfehlern oder Pool-Timeouts während API-Datenbankzugriffen wird HTTP 503 mit `Database unavailable` zurückgegeben. Die Readiness-Abfrage meldet HTTP 503 mit `Service unavailable`. Antworten enthalten keine internen Datenbankfehler oder Zugangsdaten. Die Anwendung prüft Pool-Verbindungen vor Wiederverwendung (`pool_pre_ping`).
 
 ## 9. Datenschutz, Sicherheit und Betrieb
 

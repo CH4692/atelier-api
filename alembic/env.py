@@ -1,6 +1,8 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config, pool
+from alembic.util import CommandError
+from sqlalchemy import create_engine, pool
+from sqlalchemy.exc import InterfaceError, OperationalError, TimeoutError
 from sqlmodel import SQLModel
 
 from alembic import context
@@ -40,9 +42,8 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = config.get_main_option("sqlalchemy.url")
     context.configure(
-        url=url,
+        url=settings.database_url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -59,23 +60,28 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    config.set_main_option(
-        "sqlalchemy.url",
-        settings.database_url.replace("%", "%%"),
-    )
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
+    connectable = create_engine(
+        settings.database_url,
         poolclass=pool.NullPool,
     )
 
-    with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+    try:
+        try:
+            connection = connectable.connect()
+        except (OperationalError, InterfaceError, TimeoutError):
+            raise CommandError(
+                "Database connection failed. Check DATABASE_URL and ensure "
+                "PostgreSQL is running and accepts connections."
+            ) from None
+        with connection:
+            context.configure(
+                connection=connection, target_metadata=target_metadata
+            )
 
-        with context.begin_transaction():
-            context.run_migrations()
+            with context.begin_transaction():
+                context.run_migrations()
+    finally:
+        connectable.dispose()
 
 
 if context.is_offline_mode():
