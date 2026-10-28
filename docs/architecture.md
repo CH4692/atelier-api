@@ -16,6 +16,10 @@ src/atelier_api/
 │   ├── router.py             # HTTP-Endpunkte
 │   ├── models.py             # SQLModel-Tabellen
 │   └── schemas.py            # API-Eingaben und -Ausgaben
+├── instruments/
+│   ├── __init__.py
+│   ├── models.py             # Instrumenttabelle und optionale Kundenbeziehung
+│   └── schemas.py            # Instrumenttyp und validierte Ein-/Ausgaben
 └── health/
     ├── __init__.py
     └── router.py             # Technische Zustandsprüfungen
@@ -77,6 +81,10 @@ from .schemas import CustomerCreate, CustomerRead
 Neue Features liegen ausschließlich unter `src/atelier_api/`, damit sie im Wheel enthalten sind. Imports wie `from customers.models import Customer` sind nicht vorgesehen. `__init__.py` bleibt frei von App-Start, Datenbankabfragen oder automatischer Router-Registrierung.
 
 Features rufen keine HTTP-Handler anderer Features auf. Eine benötigte fachübergreifende Operation verwendet eine ausdrücklich benannte Service-Funktion des zuständigen Features. Tabellenbeziehungen dürfen Modelle referenzieren; zyklische Laufzeit-Imports sind zu vermeiden. Neue fachliche Abhängigkeiten müssen nachvollziehbar und gerichtet bleiben.
+
+## Bestehende Instrumentbeziehung
+
+`instruments.models.Instrument` referenziert `customers.models.Customer` über einen optionalen Fremdschlüssel. Die Abhängigkeit ist gerichtet: `customers` importiert `instruments` nicht. Das Modell stellt die ORM-Beziehung `Instrument.customer` bereit. Beim Löschen eines Kunden erhält `ON DELETE SET NULL` die Instrumentdaten und hebt nur die Zuordnung auf. Ein eigener Instrument-Router folgt erst mit einem entsprechenden API-Anwendungsfall.
 
 ## Neues Feature ergänzen
 

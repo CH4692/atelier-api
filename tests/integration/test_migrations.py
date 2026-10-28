@@ -26,3 +26,34 @@ def test_migrations_create_customer_table_and_reach_head(postgres_engine):
             connection.scalars(text("SELECT version_num FROM alembic_version"))
         )
         assert versions == heads
+
+
+def test_migration_creates_instrument_constraints_and_customer_reference(
+    postgres_engine,
+):
+    inspector = inspect(postgres_engine)
+    assert {column["name"] for column in inspector.get_columns("instrument")} == {
+        "id",
+        "type",
+        "maker",
+        "year_of_manufacture",
+        "identification_number",
+        "notes",
+        "customer_id",
+    }
+    assert inspector.get_pk_constraint("instrument")["constrained_columns"] == ["id"]
+    (foreign_key,) = inspector.get_foreign_keys("instrument")
+    assert foreign_key["referred_table"] == "customer"
+    assert foreign_key["constrained_columns"] == ["customer_id"]
+    assert foreign_key["options"]["ondelete"] == "SET NULL"
+    assert {
+        constraint["name"]
+        for constraint in inspector.get_check_constraints("instrument")
+    } == {
+        "ck_instrument_type",
+        "ck_instrument_year_of_manufacture",
+    }
+    assert any(
+        index["column_names"] == ["customer_id"]
+        for index in inspector.get_indexes("instrument")
+    )

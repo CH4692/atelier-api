@@ -63,17 +63,41 @@ Nicht angegebene Felder bleiben unverändert. `phone: null` entfernt die Telefon
 curl --fail-with-body -i -X DELETE http://127.0.0.1:8000/customers/1
 ```
 
-Der Endpunkt benötigt keinen Request-Body und ist unter `/docs` dokumentiert. Das aktuelle Datenmodell besitzt keine Beziehungen zu anderen Tabellen; es werden keine Archivierung oder kaskadierenden Löschungen implementiert.
+Der Endpunkt benötigt keinen Request-Body und ist unter `/docs` dokumentiert. Zugeordnete Instrumente bleiben beim Löschen eines Kunden erhalten; die Datenbank setzt deren `customer_id` auf `null`. Es werden keine Archivierung oder kaskadierenden Löschungen von Instrumenten implementiert.
+
+### Instrumentmodell
+
+Das Feature `atelier_api.instruments` enthält das Tabellenmodell `Instrument` sowie `InstrumentCreate` und `InstrumentRead`. Ein HTTP-Endpunkt für Instrumente ist noch nicht implementiert.
+
+| Feld | Bedeutung / Validierung |
+| --- | --- |
+| `id` | Von der Datenbank erzeugte Ganzzahl; gehört zur Ausgabe, nicht zur Eingabe |
+| `type` | Pflichtfeld: `violin`, `viola`, `cello` oder `double_bass` |
+| `maker` | Optionaler Hersteller-/Geigenbauername |
+| `year_of_manufacture` | Optionales ganzzahliges Baujahr von 1 bis 9999; unbekannt bleibt `null` |
+| `identification_number` | Optionale Serien- oder Identifikationsnummer, nicht global eindeutig |
+| `notes` | Optionaler Freitext |
+| `customer_id` | Optionale positive Kunden-ID; muss bei Speicherung auf einen existierenden Kunden verweisen |
+
+Nur `type` ist für die Eingabe erforderlich. Unbekannte Eingabefelder werden abgewiesen. Die Baujahrprüfung beschränkt sich auf den Zahlenbereich; eine zusätzliche Regel gegen zukünftige Jahre besteht nicht. Eine fehlende Kundenzuordnung erlaubt die Erfassung von Werkstattbestand und anderen unzugeordneten Instrumenten. Ein Kunde kann mehrere Instrumente besitzen; `Instrument.customer` liefert die zugehörige Kundeninstanz. Eine Eigentums- oder Zuordnungshistorie ist noch nicht implementiert.
+
+Die Datenbank erzwingt Typ, Baujahrbereich und gültige Kundenreferenzen. Beim Löschen eines Kunden wird die Referenz durch `ON DELETE SET NULL` aufgehoben; das Instrument und seine Detaildaten bleiben erhalten. Die Migration `a84c6e21f902` erstellt die Tabelle und den Index auf `customer_id`:
+
+```bash
+make db-migrate
+make db-check
+```
+
+Ein Downgrade dieser Revision entfernt die Instrumenttabelle einschließlich ihrer Daten; die Kundentabelle bleibt erhalten.
 
 **Wichtige offene Befunde der Bestandsaufnahme:**
 
 - **Hoch:** Authentifizierung und Autorisierung fehlen; keine echten Kundendaten in einer öffentlich erreichbaren Instanz verwenden.
 - **Mittel:** Synchrone Datenbankaufrufe innerhalb von `async def`-Routen.
 - **Mittel:** Fehlende Pagination, Sortierung und stärkere Eingabevalidierung.
-- **Mittel:** Beziehungstests stehen aus, bis das Datenmodell Beziehungen zwischen Tabellen enthält.
 - **Mittel:** Eine Konfiguration für den produktiven Betrieb steht noch aus.
 
-Die Anwendungsmodule einschließlich `customers` und `health` werden gemeinsam als Paket `atelier_api` ausgeliefert. Der CLI-Einstiegspunkt lautet `atelier_api.cli:main`. Die CI prüft Lint, Typen, Tests, Datenbankmigrationen sowie die Installation und Imports des gebauten Wheels in einer separaten Umgebung.
+Die Anwendungsmodule einschließlich `customers`, `instruments` und `health` werden gemeinsam als Paket `atelier_api` ausgeliefert. Der CLI-Einstiegspunkt lautet `atelier_api.cli:main`. Die CI prüft Lint, Typen, Tests, Datenbankmigrationen sowie die Installation und Imports des gebauten Wheels in einer separaten Umgebung.
 
 ## 3. Geplanter Funktionsumfang
 
@@ -186,6 +210,7 @@ src/atelier_api/
 ├── settings.py       # Konfiguration aus Umgebung und .env
 ├── database.py       # Engine und Session pro Anfrage
 ├── customers/        # Kunden-Router, API-Schemas und Tabellenmodell
+├── instruments/      # Instrumentmodell und Schemas, noch ohne HTTP-Router
 └── health/           # Liveness und Datenbank-Readiness
 alembic/              # Migrationskonfiguration und versionierte Schemaänderungen
 tests/                # API- und Schema-Tests
@@ -197,7 +222,7 @@ scripts/              # Prüfung des installierten Wheels
 
 ## 6. Vorgeschlagenes fachliches Datenmodell
 
-Die folgende Skizze ist **kein vorhandenes Datenbankschema**, sondern eine Planung:
+Aktuell besteht die optionale Beziehung `Customer 1 → n Instrument` über `instrument.customer_id`. Die folgende umfangreichere Skizze mit Eigentumshistorie ist **kein vorhandenes Datenbankschema**, sondern eine Planung:
 
 ```text
 Customer ──< InstrumentOwnership >── Instrument
@@ -440,9 +465,9 @@ Ohne `TEST_DATABASE_URL` werden nur die Integrationstests mit einem Hinweis übe
 
 Jeder Testlauf erzeugt ein Schema mit zufälligem Namen und wendet darin `alembic upgrade head` auf ein leeres Schema an; `create_all()` wird nicht verwendet. Geprüft werden der erreichte Migrationsstand, die Kundentabelle, Health-Readiness sowie der vollständige Ablauf Anlegen → Auflisten/Abrufen → Ändern → Löschen. Frische Sessions bestätigen die gespeicherten Daten; zusätzliche Fälle prüfen optionale Telefonnummern, ungültige Eingaben und fehlende Kunden.
 
-Jeder API-Aufruf erhält eine eigene Session mit Savepoint innerhalb einer äußeren Testtransaktion. Am Testende wird die äußere Transaktion zurückgerollt, auch wenn der Endpunkt `session.commit()` aufgerufen hat. Eine zusätzliche Prüfung bestätigt nach jedem Test, dass keine Kundendaten zurückbleiben. Am Ende des Testlaufs wird ausschließlich das eigens erzeugte Schema entfernt. Die Suite ist für sequenzielle Ausführung eingerichtet.
+Jeder API-Aufruf erhält eine eigene Session mit Savepoint innerhalb einer äußeren Testtransaktion. Am Testende wird die äußere Transaktion zurückgerollt, auch wenn der Endpunkt `session.commit()` aufgerufen hat. Eine zusätzliche Prüfung bestätigt nach jedem Test, dass keine Kunden- oder Instrumentdaten zurückbleiben. Am Ende des Testlaufs wird ausschließlich das eigens erzeugte Schema entfernt. Die Suite ist für sequenzielle Ausführung eingerichtet.
 
-**Noch offen: Beziehungen zwischen Tabellen.** Das aktuelle Datenmodell enthält ausschließlich `Customer` und keine Fremdschlüssel oder ORM-Beziehungen. Beziehungstests können deshalb erst mit einem entsprechenden fachlichen Modell ergänzt werden; das zugehörige Abnahmekriterium ist noch nicht erfüllt.
+Die Tests unter `tests/instruments/` validieren Instrument-Schemas. `tests/integration/test_instruments.py` prüft die Speicherung aller Instrumentfelder, die Kundenzuordnung, mehrere Instrumente pro Kunde, ungültige Fremdschlüssel und Datenbankwerte sowie den Erhalt von Instrumenten beim Löschen eines Kunden. Nach jedem Test wird zusätzlich geprüft, dass keine Instrumentdaten zurückbleiben.
 
 | Make-Befehl | Direkter Aufruf |
 | --- | --- |
