@@ -28,7 +28,7 @@
 
 ## 2. Aktueller Implementierungsstand
 
-Nach der vorliegenden Codex-Bestandsaufnahme sind **nur** folgende Endpunkte implementiert:
+Aktuell sind folgende Endpunkte implementiert:
 
 | Methode | Pfad                       | Verhalten                                             |
 | ------- | -------------------------- | ----------------------------------------------------- |
@@ -44,14 +44,12 @@ Nach der vorliegenden Codex-Bestandsaufnahme sind **nur** folgende Endpunkte imp
 **Wichtige offene Befunde der Bestandsaufnahme:**
 
 - **Hoch:** Authentifizierung und Autorisierung fehlen; keine echten Kundendaten in einer öffentlich erreichbaren Instanz verwenden.
-- **Hoch:** Das gebaute Wheel enthält offenbar nicht alle Module (`customers`, `health`).
-- **Hoch:** Der konfigurierte CLI-Einstiegspunkt `atelier_api:main` verweist auf keine vorhandene Funktion.
 - **Mittel:** Synchrone Datenbankaufrufe innerhalb von `async def`-Routen.
 - **Mittel:** Fehlende Pagination, Sortierung und stärkere Eingabevalidierung.
 - **Mittel:** Kunden-API-Tests verwenden Mocks statt einer echten PostgreSQL-Testdatenbank.
-- **Mittel:** Einrichtung, Migrationen und Betrieb sind noch nicht ausreichend dokumentiert.
+- **Mittel:** Eine Konfiguration für den produktiven Betrieb steht noch aus.
 
-Zuletzt berichtete Prüfergebnisse: **21 Tests bestanden, 1 Test fehlgeschlagen** (Readiness-Test erhielt ohne erreichbare Datenbank `503`); Ruff, mypy und Build liefen durch. Diese Angaben sind ein **übernommener Prüfstand**, keine neue Ausführung.
+Die Anwendungsmodule einschließlich `customers` und `health` werden gemeinsam als Paket `atelier_api` ausgeliefert. Der CLI-Einstiegspunkt lautet `atelier_api.cli:main`. Die CI prüft Lint, Typen, Tests, Datenbankmigrationen sowie die Installation und Imports des gebauten Wheels in einer separaten Umgebung.
 
 ## 3. Geplanter Funktionsumfang
 
@@ -151,7 +149,25 @@ Kennzeichnung: **MVP** = für den ersten nutzbaren Pilotablauf vorgesehen; **Pha
 | PDF/Signatur               | Bibliotheken und Verfahren noch auszuwählen                                    |
 | Onlinezahlungen            | Stripe optional, noch nicht integriert                                         |
 
-Aktuell ist der Datenfluss im Backend: `HTTP → FastAPI-Router → Datenbank-Session → SQLModel → PostgreSQL`. Zusätzliche Service-/Repository-Schichten nur einführen, wenn die Fachlogik sie sinnvoll macht.
+### Architektur und Verzeichnisstruktur
+
+Der Datenfluss ist `HTTP/JSON → FastAPI-Router → Datenbank-Session → SQLModel/SQLAlchemy → PostgreSQL`.
+
+```text
+src/atelier_api/
+├── main.py           # FastAPI-App und Registrierung der Router
+├── cli.py            # Startbefehl atelier-api (Uvicorn)
+├── settings.py       # Konfiguration aus Umgebung und .env
+├── database.py       # Engine und Session pro Anfrage
+├── customers/        # Kunden-Router, API-Schemas und Tabellenmodell
+└── health/           # Liveness und Datenbank-Readiness
+alembic/              # Migrationskonfiguration und versionierte Schemaänderungen
+tests/                # API- und Schema-Tests
+scripts/              # Prüfung des installierten Wheels
+.github/workflows/    # CI-Prüfungen
+```
+
+`CustomerCreate` validiert Eingaben, `CustomerRead` beschreibt Antworten und `Customer` bildet die Datenbanktabelle ab. Die Kunden-Router verwenden synchrone SQLModel-Sessions über FastAPI-Dependencies. Alembic erstellt und verändert das Schema; der Server legt Tabellen beim Start nicht automatisch an. Eine Benutzeroberfläche ist noch nicht enthalten.
 
 ## 6. Vorgeschlagenes fachliches Datenmodell
 
@@ -187,9 +203,9 @@ Wichtige Regeln:
 
 ### Phase 0 – Fundament absichern (vor echten Daten)
 
-- [ ] Wheel-Paketierung korrigieren und Installation aus gebautem Wheel testen.
-- [ ] CLI-Einstiegspunkt reparieren oder entfernen.
-- [ ] Lokale Einrichtung, Migrationen und Testausführung dokumentieren.
+- [x] Wheel-Paketierung korrigieren und Installation aus gebautem Wheel testen.
+- [x] CLI-Einstiegspunkt reparieren.
+- [x] Lokale Einrichtung, Migrationen und Testausführung dokumentieren.
 - [ ] Authentifizierung und Berechtigungen implementieren.
 - [ ] PostgreSQL-Integrationstests und reproduzierbare Testdatenbank einrichten.
 - [ ] Backup-, Restore- und Fehlerprotokollierungsstrategie festlegen.
@@ -224,30 +240,167 @@ Wichtige Regeln:
 
 ## 8. Einrichtung und lokale Entwicklung
 
-> **Hinweis:** Die folgenden Befehle sind eine allgemeine Orientierung auf Basis des bekannten Stacks. Die tatsächlichen Modulpfade, Umgebungsvariablen und Startbefehle müssen am Repository geprüft werden; die Paketierungsprobleme sind noch offen.
+### Voraussetzungen
 
-Voraussetzungen: Python ≥ 3.14, `uv`, PostgreSQL.
+- Git, `make` und [uv](https://docs.astral.sh/uv/getting-started/installation/).
+- Python 3.14 gemäß `.python-version`; `uv python install` installiert die passende Version.
+- PostgreSQL 17, wie in der CI, sowie die PostgreSQL-Clientprogramme (`psql`, `createuser`, `createdb`). Alternativ kann die Datenbank in Docker laufen.
+- Ein C-Compiler und PostgreSQL-Entwicklungsdateien mit `pg_config` im `PATH`: Die aktuelle Abhängigkeit `psycopg2` kann aus Quellcode gebaut werden. Unter macOS liefern Xcode Command Line Tools den Compiler; unter Debian/Ubuntu sind typischerweise `build-essential` und `libpq-dev` erforderlich.
+
+### 8.1 Repository und Python-Umgebung
 
 ```bash
-# Abhängigkeiten einschließlich Entwicklungswerkzeugen installieren
+git clone https://github.com/CH4692/atelier-api.git
+cd atelier-api
+uv python install
 uv sync --locked --dev
+```
 
-# Tests und Qualitätsprüfungen
-uv run pytest
-uv run ruff check .
-uv run mypy .
+Alle folgenden Projektbefehle werden im Verzeichnis mit `pyproject.toml` und `Makefile` ausgeführt. `uv sync` erstellt `.venv` und installiert die im Lockfile festgelegten Abhängigkeiten. Eine manuelle Aktivierung der Umgebung ist bei `uv run` und den Make-Befehlen nicht erforderlich.
 
-# Build
+### 8.2 PostgreSQL einrichten
+
+Für eine bereits installierte und laufende lokale PostgreSQL-Instanz: Als PostgreSQL-Administrator einen Benutzer und zwei getrennte Datenbanken anlegen. Bei einer Installation mit dem Administratorkonto `postgres`:
+
+```bash
+createuser -h localhost -U postgres --pwprompt atelier
+createdb -h localhost -U postgres --owner=atelier atelier
+createdb -h localhost -U postgres --owner=atelier atelier_test
+```
+
+`--pwprompt` fragt das neue Passwort für `atelier` ab. Falls die lokale Installation einen anderen Administrator verwendet, `-U postgres` entsprechend ersetzen. Die Anwendung benötigt keine Superuser-Rechte.
+
+Alternativ eine eigene Entwicklungsdatenbank mit Docker starten:
+
+```bash
+docker run --name atelier-postgres \
+  -e POSTGRES_USER=atelier \
+  -e POSTGRES_PASSWORD=atelier_local \
+  -e POSTGRES_DB=atelier \
+  -p 127.0.0.1:5432:5432 \
+  -v atelier-postgres-data:/var/lib/postgresql/data \
+  -d postgres:17
+
+# Wiederholen, bis PostgreSQL Verbindungen akzeptiert:
+docker exec atelier-postgres pg_isready -U atelier -d atelier
+
+# Separate Testdatenbank anlegen (einmalig):
+docker exec atelier-postgres createdb -U atelier -O atelier atelier_test
+```
+
+Die Docker-Zugangsdaten sind ausschließlich für die lokale Entwicklung gedacht. Port 5432 muss frei sein. Der Container behält die Daten im benannten Volume; spätere Starts erfolgen mit `docker start atelier-postgres`, Stoppen mit `docker stop atelier-postgres`. Die `POSTGRES_*`-Werte initialisieren nur ein leeres Datenverzeichnis und ändern keine bestehenden Benutzerpasswörter.
+
+### 8.3 Umgebungsvariablen
+
+```bash
+cp .env.example .env
+```
+
+In `.env` das zuvor vergebene Passwort eintragen. Das Docker-Beispiel passt ohne weitere Anpassung zur Vorlage:
+
+```dotenv
+DATABASE_URL=postgresql+psycopg://atelier:atelier_local@localhost:5432/atelier
+```
+
+| Variable | Pflicht | Bedeutung |
+| --- | --- | --- |
+| `DATABASE_URL` | Ja | SQLAlchemy-Verbindungs-URL; Format `postgresql+psycopg://BENUTZER:PASSWORT@HOST:PORT/DATENBANK`. Kein Standardwert. |
+
+`postgresql+psycopg` wählt den Psycopg-3-Treiber. `localhost:5432` bezeichnet den Datenbankserver; das letzte `atelier` den Datenbanknamen. Sonderzeichen im Benutzer oder Passwort müssen in der URL prozentkodiert werden, beispielsweise `@` als `%40`.
+
+Die Anwendung und Alembic lesen `.env` relativ zum aktuellen Arbeitsverzeichnis. Bereits exportierte Umgebungsvariablen überschreiben die Werte aus `.env`. Die lokale `.env` ist in Git ignoriert; eigene Zugangsdaten gehören nicht ins Repository. Die `POSTGRES_*`-Variablen des Docker-Beispiels konfigurieren den Datenbankcontainer und werden von der API selbst nicht gelesen.
+
+### 8.4 Datenbankmigrationen
+
+Vor dem ersten Start und nach dem Übernehmen neuer Migrationen:
+
+```bash
+make db-migrate
+```
+
+Das führt `uv run alembic upgrade head` aus und legt beim ersten Mal die Kundentabelle an.
+
+| Zweck | Befehl |
+| --- | --- |
+| Alle ausstehenden Migrationen anwenden | `make db-migrate` |
+| Aktuellen Revisionsstand anzeigen | `uv run alembic current` |
+| Modelle mit dem migrierten Schema vergleichen | `make db-check` |
+| Nach einer Modelländerung eine Migration erzeugen | `make db-migration message="describe change"` |
+| Letzte Migration zurücknehmen | `make db-downgrade` |
+
+Automatisch erzeugte Dateien unter `alembic/versions/` vor dem Anwenden prüfen und zusammen mit der Modelländerung committen. Ein Downgrade kann Daten löschen; die initiale Migration entfernt beim Zurücknehmen die gesamte Kundentabelle.
+
+### 8.5 Entwicklungsserver starten
+
+```bash
+make dev
+```
+
+Dies startet `uv run fastapi dev` mit automatischem Neuladen bei Codeänderungen. Der Einstiegspunkt `atelier_api.main:app` ist in `pyproject.toml` konfiguriert.
+
+Alternativ über den CLI-Befehl ohne automatisches Neuladen:
+
+```bash
+uv run atelier-api --host 127.0.0.1 --port 8000
+uv run atelier-api --help
+```
+
+Server mit `Ctrl+C` beenden. Nach Installation des Wheels und Aktivierung seiner Umgebung ist derselbe Aufruf direkt als `atelier-api` verfügbar.
+
+| Adresse | Zweck |
+| --- | --- |
+| http://127.0.0.1:8000/docs | Interaktive API-Dokumentation |
+| http://127.0.0.1:8000/openapi.json | OpenAPI-Schema |
+| http://127.0.0.1:8000/health/live | Liveness: `{"status":"ok"}` |
+| http://127.0.0.1:8000/health/ready | Datenbankverbindung: `{"status":"ok","database":"connected"}` |
+
+```bash
+curl --fail http://127.0.0.1:8000/health/live
+curl --fail http://127.0.0.1:8000/health/ready
+```
+
+### 8.6 Tests, Lint und Typprüfung
+
+Tests gegen die separate Datenbank `atelier_test` ausführen. Das folgende Beispiel verwendet das lokale Docker-Passwort; bei eigener Installation entsprechend anpassen:
+
+```bash
+DATABASE_URL=postgresql+psycopg://atelier:atelier_local@localhost:5432/atelier_test make db-migrate
+DATABASE_URL=postgresql+psycopg://atelier:atelier_local@localhost:5432/atelier_test make test
+make lint
+make typecheck
+```
+
+Kunden-API-Tests verwenden derzeit gemockte Sessions. Der Readiness-Test benötigt eine echte erreichbare Datenbank. Für künftige Integrationstests die Trennung zwischen Entwicklungs- und Testdatenbank beibehalten.
+
+| Make-Befehl | Direkter Aufruf |
+| --- | --- |
+| `make test` | `uv run pytest` |
+| `make lint` | `uv run ruff check .` |
+| `make lint-fix` | `uv run ruff check . --fix` (ändert Dateien) |
+| `make typecheck` | `uv run mypy src` |
+
+Die GitHub-Actions-CI startet PostgreSQL 17 für Tests und Migrationsprüfungen und wendet Migrationen vor den Tests an. Ein eigener Job baut und installiert das Wheel in einer frischen Umgebung und prüft die Anwendung außerhalb des Quellcodeverzeichnisses.
+
+### 8.7 Paket bauen
+
+```bash
 uv build
 ```
 
-Die Anwendung verwendet laut Bestandsaufnahme `DATABASE_URL` aus der Umgebung bzw. `.env`. Ein **beispielhafter**, lokal anzupassender Wert:
+Das erzeugt Source-Archiv und Wheel unter `dist/`. Die Paketstruktur umfasst `atelier_api` einschließlich `customers`, `health` und CLI. Migrationen werden für die Entwicklung aus dem Repository ausgeführt.
 
-```dotenv
-DATABASE_URL=postgresql+psycopg://atelier:CHANGE_ME@localhost:5432/atelier
-```
+### 8.8 Häufige Probleme
 
-Keine Zugangsdaten committen. Ein korrektes `.env.example` ohne Geheimnisse sowie verifizierte Befehle für Migration und Serverstart sind noch zu ergänzen. Derzeit **nicht** blind den deklarierten `atelier-api`-CLI-Befehl verwenden, da sein Einstiegspunkt laut Bestandsaufnahme defekt ist.
+| Symptom | Prüfung / Lösung |
+| --- | --- |
+| `database_url` fehlt oder URL kann nicht gelesen werden | `.env` im Projektverzeichnis erstellen, `DATABASE_URL` ausfüllen und exportierte Werte prüfen. |
+| Verbindung abgelehnt oder `/health/ready` liefert 503 | PostgreSQL starten, Host/Port und Zugangsdaten prüfen; bei Docker auf erfolgreiche Readiness warten. |
+| Kundentabelle fehlt (`relation "customer" does not exist`) | `make db-migrate` mit derselben `DATABASE_URL` wie beim Server ausführen. |
+| Port 8000 ist belegt | Anderen Port wählen: `uv run atelier-api --port 8001`. |
+| `pg_config` fehlt beim Installieren | PostgreSQL-Entwicklungsdateien installieren und `pg_config` im `PATH` verfügbar machen. |
+| Readiness-Test erhält 503 | Testdatenbank starten und die Test-URL ausdrücklich wie oben setzen. |
+
+Eine fehlende Datenbankverbindung verhindert nicht zwingend den Serverstart. Liveness prüft nur die Anwendung; Readiness führt eine Datenbankabfrage aus. Ein erfolgreicher Readiness-Check bestätigt nicht, dass alle Migrationen angewendet sind.
 
 ## 9. Datenschutz, Sicherheit und Betrieb
 
@@ -298,5 +451,6 @@ Die Produktideen aus anderen Lösungen dienen als **Orientierung**. Fremde Texte
 ---
 
 **Lizenz:** MIT (laut bestehendem Projekt).  
-**Stand dieser README:** 27. Oktober 2026.  
+**Stand dieser README:** 28. Oktober 2026.
+
 **Hinweis:** Fachliche Anforderungen sind ein Arbeitsstand und müssen im Pilot mit Herrn Lampe validiert werden.
