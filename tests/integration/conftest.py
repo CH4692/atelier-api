@@ -22,8 +22,12 @@ def postgres_engine():
     if not value:
         pytest.skip("Set TEST_DATABASE_URL to run PostgreSQL integration tests")
     url = make_url(value)
-    if url.get_backend_name() != "postgresql" or not (url.database or "").endswith("_test"):
-        pytest.fail("TEST_DATABASE_URL must point to a PostgreSQL database ending in _test")
+    if url.get_backend_name() != "postgresql" or not (url.database or "").endswith(
+        "_test"
+    ):
+        pytest.fail(
+            "TEST_DATABASE_URL must point to a PostgreSQL database ending in _test"
+        )
 
     # Each run starts with an empty schema, including its own Alembic version table.
     schema = f"integration_{uuid4().hex}"
@@ -37,14 +41,19 @@ def postgres_engine():
         result = subprocess.run(
             [sys.executable, "-m", "alembic", "upgrade", "head"],
             cwd=Path(__file__).resolve().parents[2],
-            env={**os.environ, "DATABASE_URL": scoped_url.render_as_string(hide_password=False)},
+            env={
+                **os.environ,
+                "DATABASE_URL": scoped_url.render_as_string(hide_password=False),
+            },
             capture_output=True,
             text=True,
             check=False,
             timeout=60,
         )
         if result.returncode:
-            pytest.fail(f"Integration database migration failed:\n{result.stdout}\n{result.stderr}")
+            pytest.fail(
+                f"Integration database migration failed:\n{result.stdout}\n{result.stderr}"
+            )
         engine = create_engine(scoped_url)
         yield engine
     finally:
@@ -72,7 +81,9 @@ def db_connection(postgres_engine):
 def postgres_client(db_connection):
     def session_override():
         # New session per request; commits release a savepoint, not the outer transaction.
-        with Session(bind=db_connection, join_transaction_mode="create_savepoint") as session:
+        with Session(
+            bind=db_connection, join_transaction_mode="create_savepoint"
+        ) as session:
             yield session
 
     original_overrides = app.dependency_overrides.copy()
