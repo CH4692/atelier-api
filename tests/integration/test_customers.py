@@ -126,3 +126,55 @@ def test_delete_unknown_customer_does_not_change_database(postgres_client):
     assert response.status_code == 404
     assert response.json() == {"detail": "Customer not found"}
     assert postgres_client.get("/customers").json() == []
+
+
+def test_customer_lifecycle_with_persisted_update(postgres_client, db_connection):
+    payload = {
+        "first_name": "Jon",
+        "last_name": "Doe",
+        "email": "jon@example.com",
+        "phone": "+49176123456789",
+    }
+    response = postgres_client.post("/customers", json=payload)
+    assert response.status_code == 201
+    created = response.json()
+    path = f"/customers/{created['id']}"
+    response = postgres_client.get(path)
+    assert response.status_code == 200
+    assert response.json() == created
+
+    response = postgres_client.patch(
+        path, json={"first_name": "Maria", "email": "maria@example.com", "phone": None}
+    )
+    assert response.status_code == 200
+    updated = {
+        **created,
+        "first_name": "Maria",
+        "email": "maria@example.com",
+        "phone": None,
+    }
+    assert response.json() == updated
+    with Session(
+        bind=db_connection, join_transaction_mode="create_savepoint"
+    ) as session:
+        stored = session.get(Customer, created["id"])
+        assert stored is not None
+        assert stored.model_dump() == updated
+
+    response = postgres_client.get(path)
+    assert response.status_code == 200
+    assert response.json() == updated
+    response = postgres_client.get("/customers")
+    assert response.status_code == 200
+    assert response.json() == [updated]
+
+    response = postgres_client.patch(path, json={"email": "invalid"})
+    assert response.status_code == 422
+    assert postgres_client.get(path).json() == updated
+    response = postgres_client.delete(path)
+    assert response.status_code == 204
+    assert response.content == b""
+    assert postgres_client.get("/customers").json() == []
+    assert postgres_client.get(path).status_code == 404
+    assert postgres_client.patch(path, json={"first_name": "Jon"}).status_code == 404
+    assert postgres_client.delete(path).status_code == 404

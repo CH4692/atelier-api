@@ -401,16 +401,31 @@ curl --fail http://127.0.0.1:8000/health/ready
 
 Die verbindlichen Python-, Docstring- und API-Dokumentationsregeln stehen in [AGENTS.md](AGENTS.md). Code-Dokumentation verwendet Englisch und Google-Style-Docstrings; Ruff prüft deren Format und sinnvolle Abschnittsstruktur. Historische Migrationen werden nicht für Formatierungsänderungen umgeschrieben. Die initiale Revision enthält ausschließlich eine Importkorrektur für die Typprüfung; Schema und erzeugtes SQL bleiben unverändert.
 
-Tests gegen die separate Datenbank `atelier_test` ausführen. Das folgende Beispiel verwendet das lokale Docker-Passwort; bei eigener Installation entsprechend anpassen:
+Nach `uv sync --locked --dev` lassen sich alle Tests mit einem Befehl ausführen:
 
 ```bash
-DATABASE_URL=postgresql+psycopg://atelier:atelier_local@localhost:5432/atelier_test make db-migrate
-DATABASE_URL=postgresql+psycopg://atelier:atelier_local@localhost:5432/atelier_test make test
-make lint
-make typecheck
+make test
+# Gleichwertig: uv run pytest
 ```
 
-Die bisherigen Kunden-API-Tests verwenden gemockte Sessions. Zusätzlich prüfen die Tests unter `tests/integration/` echte PostgreSQL-Zugriffe. Der Readiness-Test benötigt ebenfalls eine erreichbare Datenbank.
+Die API-Tests verwenden gemeinsame pytest-Fixtures für FastAPIs `TestClient` und gemockte Datenbank-Sessions. Ohne exportierte `DATABASE_URL` setzen die Tests vor dem Anwendungsimport eine SQLite-URL; diese dient nur der Initialisierung und führt keine SQLite-Datenbanktests aus. Eine lokale `.env` mit PostgreSQL-Zugang ist für die gemockten Tests nicht erforderlich. Vorhandene Dependency-Overrides werden nach jedem Test wiederhergestellt.
+
+Ohne `TEST_DATABASE_URL` laufen API-, Schema- und Konfigurationstests; nur PostgreSQL-Integrationstests werden ausdrücklich übersprungen. Nach Konfiguration der Testdatenbank führt derselbe Befehl auch diese Tests aus:
+
+```bash
+export TEST_DATABASE_URL='postgresql+psycopg://atelier:atelier_local@localhost:5432/atelier_test'
+make test
+```
+
+Das Beispiel verwendet das lokale Docker-Passwort; bei eigener Installation entsprechend anpassen. Die Datenbank muss bereits existieren. Die Integrationstest-Fixtures wenden Migrationen selbst in einem neuen Schema an; ein manuelles `make db-migrate` ist dafür nicht erforderlich.
+
+| Abdeckung | Testdateien |
+| --- | --- |
+| Liveness und Readiness, einschließlich Datenbankfehlern | `tests/health/test_api.py`, `tests/integration/test_health.py` |
+| Kunden anlegen, auflisten und anhand der ID abrufen | `tests/customers/test_api.py`, `tests/integration/test_customers.py` |
+| Kunden teilweise ändern, Speicherung prüfen und Felder erhalten | Dieselben API-Tests und PostgreSQL-Lebenszyklustest |
+| Kunden löschen, erneuter Abruf, Erhalt anderer Kunden | Dieselben API- und Integrationstests |
+| Ungültige Eingaben und unbekannte IDs (422 / 404) | API-, Schema- und Integrationstests |
 
 #### PostgreSQL-Integrationstests
 
@@ -421,9 +436,9 @@ TEST_DATABASE_URL=postgresql+psycopg://atelier:atelier_local@localhost:5432/atel
   uv run pytest tests/integration -v
 ```
 
-Ohne `TEST_DATABASE_URL` werden nur die Integrationstests mit einem Hinweis übersprungen. Eine gesetzte, aber ungeeignete URL oder nicht erreichbare Testdatenbank führt zu einem Fehler. `DATABASE_URL` bleibt für das Laden der Anwendung erforderlich und kann lokal aus `.env` stammen. `TEST_DATABASE_URL` wird ausschließlich von den Test-Fixtures gelesen.
+Ohne `TEST_DATABASE_URL` werden nur die Integrationstests mit einem Hinweis übersprungen. Eine gesetzte, aber ungeeignete URL oder nicht erreichbare Testdatenbank führt zu einem Fehler. `TEST_DATABASE_URL` wird ausschließlich von den Test-Fixtures gelesen. Die allgemeine `DATABASE_URL` erhält im Testprozess bei Bedarf den oben beschriebenen Import-Standardwert; außerhalb von pytest bleibt sie für die Anwendung erforderlich.
 
-Jeder Testlauf erzeugt ein Schema mit zufälligem Namen und wendet darin `alembic upgrade head` auf ein leeres Schema an; `create_all()` wird nicht verwendet. Geprüft werden der erreichte Migrationsstand, die Kundentabelle, das Anlegen und Auslesen über API und frische Sessions, optionale Telefonnummern, ungültige Eingaben und fehlende Kunden.
+Jeder Testlauf erzeugt ein Schema mit zufälligem Namen und wendet darin `alembic upgrade head` auf ein leeres Schema an; `create_all()` wird nicht verwendet. Geprüft werden der erreichte Migrationsstand, die Kundentabelle, Health-Readiness sowie der vollständige Ablauf Anlegen → Auflisten/Abrufen → Ändern → Löschen. Frische Sessions bestätigen die gespeicherten Daten; zusätzliche Fälle prüfen optionale Telefonnummern, ungültige Eingaben und fehlende Kunden.
 
 Jeder API-Aufruf erhält eine eigene Session mit Savepoint innerhalb einer äußeren Testtransaktion. Am Testende wird die äußere Transaktion zurückgerollt, auch wenn der Endpunkt `session.commit()` aufgerufen hat. Eine zusätzliche Prüfung bestätigt nach jedem Test, dass keine Kundendaten zurückbleiben. Am Ende des Testlaufs wird ausschließlich das eigens erzeugte Schema entfernt. Die Suite ist für sequenzielle Ausführung eingerichtet.
 
@@ -438,7 +453,7 @@ Jeder API-Aufruf erhält eine eigene Session mit Savepoint innerhalb einer äuß
 | `make format-check` | `uv run ruff format --check .` |
 | `make format` | `uv run ruff format .` (ändert Dateien) |
 
-Die GitHub-Actions-CI startet PostgreSQL 17 für Tests und Migrationsprüfungen und wendet Migrationen vor den Tests an. Der Test-Job setzt `TEST_DATABASE_URL` und führt die Integrationstests in einem eigenen Schritt aus; deren Fixtures prüfen zusätzlich Migrationen in einem leeren Schema. Ein eigener Job baut und installiert das Wheel in einer frischen Umgebung und prüft die Anwendung außerhalb des Quellcodeverzeichnisses.
+Die GitHub-Actions-CI startet PostgreSQL 17 für Tests und Migrationsprüfungen und wendet Migrationen vor den Tests an. Der Test-Job setzt `TEST_DATABASE_URL` und führt mit `make test` alle Tests einschließlich der Integrationstests aus; deren Fixtures prüfen zusätzlich Migrationen in einem leeren Schema. Ein eigener Job baut und installiert das Wheel in einer frischen Umgebung und prüft die Anwendung außerhalb des Quellcodeverzeichnisses.
 
 ### 8.7 Paket bauen
 
@@ -457,7 +472,7 @@ Das erzeugt Source-Archiv und Wheel unter `dist/`. Die Paketstruktur umfasst `at
 | Kundentabelle fehlt (`relation "customer" does not exist`) | `make db-migrate` mit derselben `DATABASE_URL` wie beim Server ausführen. |
 | Port 8000 ist belegt | Anderen Port wählen: `uv run atelier-api --port 8001`. |
 | `pg_config` fehlt beim Installieren | PostgreSQL-Entwicklungsdateien installieren und `pg_config` im `PATH` verfügbar machen. |
-| Readiness-Test erhält 503 | Testdatenbank starten und die Test-URL ausdrücklich wie oben setzen. |
+| PostgreSQL-Readiness-Test schlägt fehl | Testdatenbank starten und `TEST_DATABASE_URL` wie oben setzen. |
 
 Eine fehlende Datenbankverbindung verhindert nicht zwingend den Serverstart. Liveness prüft nur die Anwendung; Readiness führt eine Datenbankabfrage aus. Ein erfolgreicher Readiness-Check bestätigt nicht, dass alle Migrationen angewendet sind.
 

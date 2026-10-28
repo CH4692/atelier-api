@@ -1,23 +1,8 @@
-from unittest.mock import MagicMock
-
 import pytest
-from fastapi.testclient import TestClient
 
 from atelier_api.customers.models import Customer
 from atelier_api.customers.schemas import CustomerRead
-from atelier_api.database import get_session
 from atelier_api.main import app
-
-
-@pytest.fixture
-def mock_session():
-    session = MagicMock()
-    original_overrides = app.dependency_overrides.copy()
-    app.dependency_overrides[get_session] = lambda: session
-    yield session
-    app.dependency_overrides.clear()
-    app.dependency_overrides.update(original_overrides)
-
 
 testdata_customers: list[Customer] = [
     Customer(
@@ -43,10 +28,8 @@ test_customer = Customer(
     phone="+49176123456789",
 )
 
-client = TestClient(app)
 
-
-def test_get_customers(mock_session):
+def test_get_customers(client, mock_session):
     mock_session.exec.return_value.all.return_value = testdata_customers
     response = client.get("/customers")
     assert response.status_code == 200
@@ -56,7 +39,7 @@ def test_get_customers(mock_session):
     assert response.json() == expected_json
 
 
-def test_get_customer_by_id(mock_session):
+def test_get_customer_by_id(client, mock_session):
     mock_session.get.return_value = test_customer
     response = client.get("/customers/1")
     assert response.status_code == 200
@@ -65,7 +48,7 @@ def test_get_customer_by_id(mock_session):
     mock_session.get.assert_called_once_with(Customer, 1)
 
 
-def test_get_customer_by_id_not_found(mock_session):
+def test_get_customer_by_id_not_found(client, mock_session):
     mock_session.get.return_value = None
     response = client.get("/customers/999")
     assert response.status_code == 404
@@ -73,7 +56,7 @@ def test_get_customer_by_id_not_found(mock_session):
     mock_session.get.assert_called_once_with(Customer, 999)
 
 
-def test_get_customer_by_id_invalid_id(mock_session):
+def test_get_customer_by_id_invalid_id(client, mock_session):
     response = client.get("/customers/abc")
     assert response.status_code == 422
     mock_session.get.assert_not_called()
@@ -84,6 +67,7 @@ def test_get_customer_by_id_invalid_id(mock_session):
     [0, -1, 999999],
 )
 def test_get_customer_by_id_not_found_for_boundary_values(
+    client,
     mock_session,
     customer_id,
 ):
@@ -96,7 +80,7 @@ def test_get_customer_by_id_not_found_for_boundary_values(
     )
 
 
-def test_create_customer(mock_session):
+def test_create_customer(client, mock_session):
     payload = {
         "first_name": "Jon",
         "last_name": "Doe",
@@ -120,21 +104,21 @@ def test_create_customer(mock_session):
     mock_session.refresh.assert_called_once_with(saved_customer)
 
 
-def test_get_customers_empty(mock_session):
+def test_get_customers_empty(client, mock_session):
     mock_session.exec.return_value.all.return_value = []
     response = client.get("/customers")
     assert response.status_code == 200
     assert response.json() == []
 
 
-def test_create_customer_missing_required_fields(mock_session):
+def test_create_customer_missing_required_fields(client, mock_session):
     response = client.post("/customers", json={})
     assert response.status_code == 422
     mock_session.add.assert_not_called()
     mock_session.commit.assert_not_called()
 
 
-def test_create_customer_invalid_email(mock_session):
+def test_create_customer_invalid_email(client, mock_session):
     payload = {
         "first_name": "Jon",
         "last_name": "Doe",
@@ -162,7 +146,7 @@ def update_target(mock_session):
     return customer
 
 
-def test_update_customer_all_fields(mock_session, update_target):
+def test_update_customer_all_fields(client, mock_session, update_target):
     payload = {
         "first_name": "Maria",
         "last_name": "Müller",
@@ -178,7 +162,7 @@ def test_update_customer_all_fields(mock_session, update_target):
     mock_session.refresh.assert_called_once_with(update_target)
 
 
-def test_update_customer_preserves_omitted_fields(mock_session, update_target):
+def test_update_customer_preserves_omitted_fields(client, mock_session, update_target):
     before = update_target.model_dump()
     response = client.patch("/customers/1", json={"first_name": "  Maria  "})
     assert response.status_code == 200
@@ -186,21 +170,21 @@ def test_update_customer_preserves_omitted_fields(mock_session, update_target):
     mock_session.commit.assert_called_once()
 
 
-def test_update_customer_can_clear_phone(mock_session, update_target):
+def test_update_customer_can_clear_phone(client, mock_session, update_target):
     response = client.patch("/customers/1", json={"phone": None})
     assert response.status_code == 200
     assert response.json()["phone"] is None
     mock_session.commit.assert_called_once()
 
 
-def test_update_customer_empty_body_is_noop(mock_session, update_target):
+def test_update_customer_empty_body_is_noop(client, mock_session, update_target):
     response = client.patch("/customers/1", json={})
     assert response.status_code == 200
     assert response.json() == update_target.model_dump()
     mock_session.commit.assert_not_called()
 
 
-def test_update_customer_unknown_id(mock_session):
+def test_update_customer_unknown_id(client, mock_session):
     mock_session.get.return_value = None
     response = client.patch("/customers/999", json={"first_name": "Maria"})
     assert response.status_code == 404
@@ -223,20 +207,20 @@ def test_update_customer_unknown_id(mock_session):
         {"unknown": "value"},
     ],
 )
-def test_update_customer_rejects_invalid_data(mock_session, payload):
+def test_update_customer_rejects_invalid_data(client, mock_session, payload):
     response = client.patch("/customers/1", json=payload)
     assert response.status_code == 422
     mock_session.get.assert_not_called()
     mock_session.commit.assert_not_called()
 
 
-def test_update_customer_rejects_invalid_id(mock_session):
+def test_update_customer_rejects_invalid_id(client, mock_session):
     response = client.patch("/customers/abc", json={"first_name": "Maria"})
     assert response.status_code == 422
     mock_session.get.assert_not_called()
 
 
-def test_update_customer_requires_request_body(mock_session):
+def test_update_customer_requires_request_body(client, mock_session):
     response = client.patch("/customers/1")
     assert response.status_code == 422
     mock_session.commit.assert_not_called()
@@ -251,7 +235,7 @@ def test_update_customer_documented_in_openapi():
     ].endswith("/CustomerUpdate")
 
 
-def test_delete_customer_returns_empty_204(mock_session, update_target):
+def test_delete_customer_returns_empty_204(client, mock_session, update_target):
     response = client.delete("/customers/1")
     assert response.status_code == 204
     assert response.content == b""
@@ -260,7 +244,7 @@ def test_delete_customer_returns_empty_204(mock_session, update_target):
     mock_session.commit.assert_called_once()
 
 
-def test_delete_customer_unknown_id(mock_session):
+def test_delete_customer_unknown_id(client, mock_session):
     mock_session.get.return_value = None
     response = client.delete("/customers/999999")
     assert response.status_code == 404
@@ -269,7 +253,7 @@ def test_delete_customer_unknown_id(mock_session):
     mock_session.commit.assert_not_called()
 
 
-def test_delete_customer_invalid_id(mock_session):
+def test_delete_customer_invalid_id(client, mock_session):
     response = client.delete("/customers/abc")
     assert response.status_code == 422
     mock_session.get.assert_not_called()

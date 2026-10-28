@@ -41,6 +41,8 @@ plugins = ["pydantic.mypy"]
 
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers"
 markers = ["integration: requires a dedicated PostgreSQL TEST_DATABASE_URL"]
 
 [tool.ruff]

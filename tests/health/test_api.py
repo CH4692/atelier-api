@@ -1,38 +1,23 @@
-from fastapi.testclient import TestClient
-
-from atelier_api.main import app
-
-client = TestClient(app)
+from sqlalchemy.exc import SQLAlchemyError
 
 
-def test_health_check_ready():
+def test_health_check_ready(client, mock_session):
     response = client.get("/health/ready")
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "database": "connected"}
+    mock_session.exec.assert_called_once()
 
 
-def test_health_check_live():
+def test_health_check_live(client, mock_session):
     response = client.get("/health/live")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+    mock_session.exec.assert_not_called()
 
 
-def test_readiness_database_failure_returns_503():
-    from unittest.mock import MagicMock
-
-    from sqlalchemy.exc import SQLAlchemyError
-
-    from atelier_api.database import get_session
-
-    session = MagicMock()
-    session.exec.side_effect = SQLAlchemyError("private_password")
-    original_overrides = app.dependency_overrides.copy()
-    app.dependency_overrides[get_session] = lambda: session
-    try:
-        response = client.get("/health/ready")
-    finally:
-        app.dependency_overrides.clear()
-        app.dependency_overrides.update(original_overrides)
+def test_readiness_database_failure_returns_503(client, mock_session):
+    mock_session.exec.side_effect = SQLAlchemyError("private_password")
+    response = client.get("/health/ready")
     assert response.status_code == 503
     assert response.json() == {"detail": "Service unavailable"}
     assert "private_password" not in response.text
