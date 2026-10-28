@@ -1,4 +1,4 @@
-.PHONY: dev test lint lint-fix typecheck db-migrate db-migration db-downgrade db-check
+.PHONY: dev test lint lint-fix format format-check typecheck db-migrate db-migration db-downgrade db-check
 
 dev:
 	uv run fastapi dev
@@ -12,8 +12,14 @@ lint:
 lint-fix:
 	uv run ruff check . --fix
 
+format:
+	uv run ruff format .
+
+format-check:
+	uv run ruff format --check .
+
 typecheck:
-	uv run mypy src
+	uv run mypy .
 
 db-migration:
 	uv run alembic revision --autogenerate -m "$(message)"

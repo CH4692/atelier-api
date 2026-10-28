@@ -39,5 +39,28 @@ dev = [
 [tool.mypy]
 plugins = ["pydantic.mypy"]
 
+
 [tool.pytest.ini_options]
 markers = ["integration: requires a dedicated PostgreSQL TEST_DATABASE_URL"]
+
+[tool.ruff]
+target-version = "py314"
+
+[tool.ruff.lint]
+# Extend Ruff's existing defaults; validate useful docstrings without requiring
+# boilerplate documentation on every module, test or trivial function (D100-D107).
+extend-select = [
+    "D200", "D205", "D209", "D210", "D212", "D300", "D400", "D402",
+    "D403", "D405", "D407", "D414", "D415", "D417",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Preserve generated revision headers without weakening their existing lint rules.
+"alembic/versions/*.py" = ["D"]
+
+[tool.ruff.format]
+# Historical migration revisions are immutable; do not rewrite generated files.
+exclude = ["alembic/versions/**"]
