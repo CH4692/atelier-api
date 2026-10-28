@@ -249,3 +249,36 @@ def test_update_customer_documented_in_openapi():
     assert operation["requestBody"]["content"]["application/json"]["schema"][
         "$ref"
     ].endswith("/CustomerUpdate")
+
+
+def test_delete_customer_returns_empty_204(mock_session, update_target):
+    response = client.delete("/customers/1")
+    assert response.status_code == 204
+    assert response.content == b""
+    mock_session.get.assert_called_once_with(Customer, 1)
+    mock_session.delete.assert_called_once_with(update_target)
+    mock_session.commit.assert_called_once()
+
+
+def test_delete_customer_unknown_id(mock_session):
+    mock_session.get.return_value = None
+    response = client.delete("/customers/999999")
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Customer not found"}
+    mock_session.delete.assert_not_called()
+    mock_session.commit.assert_not_called()
+
+
+def test_delete_customer_invalid_id(mock_session):
+    response = client.delete("/customers/abc")
+    assert response.status_code == 422
+    mock_session.get.assert_not_called()
+    mock_session.delete.assert_not_called()
+    mock_session.commit.assert_not_called()
+
+
+def test_delete_customer_documented_in_openapi():
+    operation = app.openapi()["paths"]["/customers/{customer_id}"]["delete"]
+    assert {"204", "404", "422", "503"} <= operation["responses"].keys()
+    assert "content" not in operation["responses"]["204"]
+    assert "requestBody" not in operation
