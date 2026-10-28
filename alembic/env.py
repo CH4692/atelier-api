@@ -4,8 +4,8 @@ from sqlalchemy import engine_from_config, pool
 from sqlmodel import SQLModel
 
 from alembic import context
+from atelier_api.customers.models import Customer  # noqa: F401
 from atelier_api.settings import settings
-from customers.models import Customer  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

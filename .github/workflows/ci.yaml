@@ -6,6 +6,37 @@ on:
       - main
 
 jobs:
+  package-installation:
+    name: Wheel installation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install
+
+      - name: Build package
+        run: uv build
+
+      - name: Install wheel in a clean environment
+        run: |
+          uv venv "$RUNNER_TEMP/atelier-package-test" --python "$(cat .python-version)"
+          uv pip install --python "$RUNNER_TEMP/atelier-package-test/bin/python" dist/*.whl
+
+      - name: Verify installed application outside the repository
+        env:
+          DATABASE_URL: sqlite://
+        run: |
+          cp scripts/check_installed_package.py "$RUNNER_TEMP/check_installed_package.py"
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/atelier-package-test/bin/python" -I check_installed_package.py
+
   lint:
     runs-on: ubuntu-latest
     steps:
