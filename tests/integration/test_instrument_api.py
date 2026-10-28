@@ -80,3 +80,46 @@ def test_rejected_registration_does_not_create_instrument(
         bind=db_connection, join_transaction_mode="create_savepoint"
     ) as session:
         assert session.exec(select(Instrument)).all() == []
+
+
+def test_list_instruments_returns_registered_records(postgres_client):
+    response = postgres_client.post(
+        "/customers",
+        json={
+            "first_name": "Maria",
+            "last_name": "Doe",
+            "email": "maria@example.com",
+        },
+    )
+    assert response.status_code == 201
+    customer_id = response.json()["id"]
+    created = []
+    for payload in [
+        {
+            "type": "violin",
+            "maker": "Example maker",
+            "year_of_manufacture": 1920,
+            "identification_number": "LABEL-42",
+            "notes": "Repaired top.",
+            "customer_id": customer_id,
+        },
+        {"type": "cello"},
+    ]:
+        response = postgres_client.post("/instruments", json=payload)
+        assert response.status_code == 201
+        created.append(response.json())
+
+    response = postgres_client.get("/instruments")
+    assert response.status_code == 200
+    records = response.json()
+    assert isinstance(records, list)
+    assert len(records) == 2
+    assert {record["id"]: record for record in records} == {
+        record["id"]: record for record in created
+    }
+
+
+def test_list_instruments_returns_empty_list_from_postgresql(postgres_client):
+    response = postgres_client.get("/instruments")
+    assert response.status_code == 200
+    assert response.json() == []

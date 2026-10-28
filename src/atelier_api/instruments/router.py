@@ -1,6 +1,7 @@
-"""Register instruments and validate their optional customer association."""
+"""Register and list instruments with their optional customer association."""
 
 from fastapi import APIRouter, HTTPException, status
+from sqlmodel import select
 
 from atelier_api.customers.models import Customer
 from atelier_api.database import SessionDep
@@ -9,6 +10,22 @@ from .models import Instrument
 from .schemas import InstrumentCreate, InstrumentRead
 
 instruments_router = APIRouter(prefix="/instruments", tags=["instruments"])
+
+
+@instruments_router.get(
+    "",
+    summary="List registered instruments",
+    response_model=list[InstrumentRead],
+    responses={503: {"description": "Database unavailable"}},
+)
+def get_instruments(session: SessionDep) -> list[InstrumentRead]:
+    """Return all instruments, including records without a customer.
+
+    An empty database returns an empty list. Results are not paginated and
+    have no explicitly defined sort order.
+    """
+    instruments = session.exec(select(Instrument)).all()
+    return [InstrumentRead.model_validate(instrument) for instrument in instruments]
 
 
 @instruments_router.post(
