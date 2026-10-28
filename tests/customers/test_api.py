@@ -3,10 +3,10 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
+from atelier_api.customers.models import Customer
+from atelier_api.customers.schemas import CustomerRead
 from atelier_api.database import get_session
 from atelier_api.main import app
-from customers.models import Customer
-from customers.schemas import CustomerRead
 
 
 # 1. Erstelle eine Fixture für die Mock-Datenbank-Session
