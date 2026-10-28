@@ -240,6 +240,7 @@ Wichtige Regeln:
 
 ## 8. Einrichtung und lokale Entwicklung
 
+<<<<<<< HEAD
 ### Voraussetzungen
 
 - Git, `make` und [uv](https://docs.astral.sh/uv/getting-started/installation/).
@@ -400,9 +401,33 @@ uv build
 ```
 
 Das erzeugt Source-Archiv und Wheel unter `dist/`. Die Paketstruktur umfasst `atelier_api` einschließlich `customers`, `health` und CLI. Migrationen werden für die Entwicklung aus dem Repository ausgeführt.
+=======
+Voraussetzungen: Python 3.14, `uv`, `make` und eine laufende PostgreSQL-Instanz (CI: PostgreSQL 17). Für den möglichen Build von `psycopg2` werden ein C-Compiler und PostgreSQL-Entwicklungsdateien mit `pg_config` im `PATH` benötigt.
+
+```bash
+uv python install
+uv sync --locked --dev
+cp .env.example .env
+```
+
+Alle Projektbefehle im Verzeichnis mit `pyproject.toml` ausführen. `.env` lokal bearbeiten; sie wird relativ zum Arbeitsverzeichnis geladen.
+
+### PostgreSQL und Umgebungsvariablen
+
+Als lokaler PostgreSQL-Administrator einen Benutzer und getrennte Entwicklungs- und Testdatenbanken anlegen (Administratorkonto bei Bedarf anpassen):
+
+```bash
+createuser -h localhost -U postgres --pwprompt atelier
+createdb -h localhost -U postgres --owner=atelier atelier
+createdb -h localhost -U postgres --owner=atelier atelier_test
+```
+
+`--pwprompt` fragt das neue Passwort ab. In `.env` denselben Wert verwenden:
+>>>>>>> 965e7f4 (feat: standardize database configuration)
 
 ### 8.8 Häufige Probleme
 
+<<<<<<< HEAD
 | Symptom | Prüfung / Lösung |
 | --- | --- |
 | `database_url` fehlt oder URL kann nicht gelesen werden | `.env` im Projektverzeichnis erstellen, `DATABASE_URL` ausfüllen und exportierte Werte prüfen. |
@@ -413,6 +438,63 @@ Das erzeugt Source-Archiv und Wheel unter `dist/`. Die Paketstruktur umfasst `at
 | Readiness-Test erhält 503 | Testdatenbank starten und die Test-URL ausdrücklich wie oben setzen. |
 
 Eine fehlende Datenbankverbindung verhindert nicht zwingend den Serverstart. Liveness prüft nur die Anwendung; Readiness führt eine Datenbankabfrage aus. Ein erfolgreicher Readiness-Check bestätigt nicht, dass alle Migrationen angewendet sind.
+=======
+| Variable | Pflicht | Bedeutung |
+| --- | --- | --- |
+| `DATABASE_URL` | Ja | SQLAlchemy-URL: `postgresql+psycopg://BENUTZER:PASSWORT@HOST:PORT/DATENBANK`. Kein Standardwert. |
+
+Exportierte Umgebungsvariablen überschreiben Werte aus `.env`. Sonderzeichen im Benutzer oder Passwort prozentkodieren, beispielsweise `@` als `%40`. Die Settings prüfen die URL-Syntax und den SQLAlchemy-Dialekt; PostgreSQL benötigt einen Datenbanknamen. Konfigurationsfehler zeigen den eingegebenen Wert nicht an. Die Validierung baut keine Verbindung auf und prüft weder Passwort noch Erreichbarkeit.
+
+`.env` und Varianten wie `.env.test` sind in Git ignoriert; nur `.env.example` wird als Vorlage versioniert. Automatisch geladen wird ausschließlich `.env`. Andere Konfigurationen über die Umgebung bereitstellen. Keine echten Zugangsdaten committen. Falls dies versehentlich geschieht, Zugangsdaten ersetzen: `.gitignore` entfernt sie nicht aus der Historie.
+
+### Migrationen: online und offline
+
+Anwendung sowie beide Alembic-Modi verwenden dieselbe `DATABASE_URL` aus `atelier_api.settings`. Eine zweite URL in `alembic.ini` ist nicht erforderlich.
+
+```bash
+# Online: mit der Datenbank verbinden und Migrationen anwenden
+make db-migrate
+
+# Aktuellen Stand und Übereinstimmung mit den Modellen prüfen
+uv run alembic current
+make db-check
+
+# Offline: SQL ohne laufende Datenbank erzeugen, nicht ausführen
+uv run alembic upgrade head --sql > migration.sql
+
+# Nach einer Modelländerung eine Migration erzeugen und Datei prüfen
+make db-migration message="describe change"
+
+# Letzte Migration zurücknehmen; kann Daten löschen
+make db-downgrade
+```
+
+Migrationen vor dem Serverstart anwenden; die Anwendung erstellt Tabellen nicht automatisch. Beim Online-Verbindungsfehler beendet Alembic den Befehl mit einem Fehlerstatus und einem verständlichen Hinweis auf `DATABASE_URL` und die Datenbankerreichbarkeit. Zugangsdaten werden dabei nicht ausgegeben.
+
+### Server und Prüfungen
+
+```bash
+# Entwicklungsserver mit automatischem Neuladen
+make dev
+
+# Alternativ CLI ohne automatisches Neuladen
+uv run atelier-api --host 127.0.0.1 --port 8000
+
+# Tests mit separater Datenbank; Passwort lokal ersetzen
+DATABASE_URL=postgresql+psycopg://atelier:CHANGE_ME@localhost:5432/atelier_test make db-migrate
+DATABASE_URL=postgresql+psycopg://atelier:CHANGE_ME@localhost:5432/atelier_test make test
+
+make lint
+make typecheck
+uv build
+```
+
+API-Dokumentation: http://127.0.0.1:8000/docs. Liveness: `/health/live`. Datenbankbereitschaft: `/health/ready`. Der Readiness-Test benötigt eine erreichbare Datenbank; die Kunden-API-Tests verwenden derzeit gemockte Sessions.
+
+Bei Verbindungsfehlern oder Pool-Timeouts während API-Datenbankzugriffen wird HTTP 503 mit `Database unavailable` zurückgegeben. Die Readiness-Abfrage meldet HTTP 503 mit `Service unavailable`. Antworten enthalten keine internen Datenbankfehler oder Zugangsdaten. Die Anwendung prüft Pool-Verbindungen vor Wiederverwendung (`pool_pre_ping`).
+
+Eine nicht erreichbare Datenbank verhindert nicht zwingend den Serverstart. Bei 503 PostgreSQL, Host, Port und Zugangsdaten prüfen. Ein erfolgreicher Readiness-Check bestätigt nur die Verbindung, nicht den Migrationsstand. Bei fehlender Kundentabelle `make db-migrate` mit derselben URL wie beim Server ausführen.
+>>>>>>> 965e7f4 (feat: standardize database configuration)
 
 Bei Verbindungsfehlern oder Pool-Timeouts während API-Datenbankzugriffen wird HTTP 503 mit `Database unavailable` zurückgegeben. Die Readiness-Abfrage meldet HTTP 503 mit `Service unavailable`. Antworten enthalten keine internen Datenbankfehler oder Zugangsdaten. Die Anwendung prüft Pool-Verbindungen vor Wiederverwendung (`pool_pre_ping`).
 
