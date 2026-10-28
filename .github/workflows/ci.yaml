@@ -120,11 +120,8 @@ jobs:
       - name: Apply database migrations
         run: make db-migrate
 
-      - name: Run unit and configuration tests
-        run: uv run pytest --ignore=tests/integration
-
-      - name: Run PostgreSQL integration tests
-        run: uv run pytest tests/integration -v
+      - name: Run all tests including PostgreSQL integration
+        run: make test
 
   migrations:
     name: Database Migrations

@@ -70,8 +70,12 @@ uv run pytest
 ```
 
 `make lint`, `make format-check`, `make typecheck` and `make test` are equivalent.
-`make format` applies formatting. Set `DATABASE_URL` to a migrated PostgreSQL test
-database for pytest; the existing readiness test requires an actual connection.
+`make format` applies formatting. API tests use shared TestClient and mocked-session
+fixtures and need no running database. Without an exported `DATABASE_URL`, pytest
+sets an import-only SQLite URL before loading the application. To include real
+PostgreSQL tests, set `TEST_DATABASE_URL` to a dedicated database ending in `_test`;
+the integration fixtures create and migrate a disposable schema. Without this
+variable, integration tests are explicitly skipped.
 Also verify application imports and OpenAPI generation after API documentation edits.
 
 The repository checks application code, tests, scripts and migrations with
