@@ -11,6 +11,7 @@ from alembic import context
 
 # Register table models in SQLModel.metadata before Alembic inspects it.
 from atelier_api.customers.models import Customer  # noqa: F401
+from atelier_api.instruments.models import Instrument  # noqa: F401
 from atelier_api.settings import settings
 
 config = context.config

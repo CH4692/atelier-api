@@ -75,6 +75,7 @@ def db_connection(postgres_engine):
     # Verify cleanup even when an API handler explicitly committed its session.
     with postgres_engine.connect() as connection:
         assert connection.scalar(text("SELECT count(*) FROM customer")) == 0
+        assert connection.scalar(text("SELECT count(*) FROM instrument")) == 0
 
 
 @pytest.fixture
