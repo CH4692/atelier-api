@@ -35,32 +35,32 @@ Health und die Anmeldemöglichkeit sind öffentlich.
 
 | Methode | Pfad                       | Verhalten                                             |
 | ------- | -------------------------- | ----------------------------------------------------- |
-| `POST` | `/auth/login` | Anmeldung und neues HttpOnly-Sitzungscookie; `200`, `401`, `403` oder `429` |
-| `POST` | `/auth/logout` | Sitzung widerrufen und Cookie löschen; `204` |
-| `GET` | `/auth/me` | Aktuelles Konto einschließlich ID, E-Mail und Rolle; `200` oder `401` |
+| `POST` | `/api/v1/auth/login` | Anmeldung und neues HttpOnly-Sitzungscookie; `200`, `401`, `403` oder `429` |
+| `POST` | `/api/v1/auth/logout` | Sitzung widerrufen und Cookie löschen; `204` |
+| `GET` | `/api/v1/auth/me` | Aktuelles Konto einschließlich ID, E-Mail und Rolle; `200` oder `401` |
 | `GET`   | `/`                        | Gibt „Hello World“ zurück                             |
 | `GET`   | `/health/live`             | Liveness-Prüfung                                      |
 | `GET`   | `/health/ready`            | Prüft die Datenbankverbindung                         |
-| `GET`   | `/customers`               | Gibt derzeit alle Kunden ohne Pagination zurück       |
-| `GET`   | `/customers/{customer_id}` | Gibt einen Kunden zurück; `404` falls nicht vorhanden |
-| `GET` | `/customers/{customer_id}/instruments` | Liefert nur die aktuell zugeordneten Instrumente; `200` oder bei unbekanntem Kunden `404` |
-| `POST`  | `/customers`               | Legt einen Kunden an; `201` bei Erfolg                |
-| `PATCH` | `/customers/{customer_id}` | Ändert angegebene Kundendaten; `200`, bei unbekannter ID `404` |
-| `DELETE` | `/customers/{customer_id}` | Löscht einen Kunden dauerhaft; `204` ohne Inhalt, bei unbekannter ID `404` |
-| `POST` | `/instruments` | Registriert ein Instrument; `201`, bei unbekanntem Kunden `404` |
-| `GET` | `/instruments` | Liefert alle registrierten Instrumente als Liste; `200`, auch bei leerer Liste |
-| `GET` | `/instruments/{instrument_id}` | Liefert Instrumentdetails mit optionaler Kunden-ID; `200`, bei unbekannter ID `404` |
-| `PATCH` | `/instruments/{instrument_id}` | Ändert Instrumentdetails und Kundenzuordnung; `200`, bei unbekanntem Instrument oder Kunden `404` |
-| `DELETE` | `/instruments/{instrument_id}` | Löscht ein Instrument dauerhaft; `204` ohne Inhalt, bei unbekannter ID `404` |
+| `GET`   | `/api/v1/customers`               | Gibt derzeit alle Kunden ohne Pagination zurück       |
+| `GET`   | `/api/v1/customers/{customer_id}` | Gibt einen Kunden zurück; `404` falls nicht vorhanden |
+| `GET` | `/api/v1/customers/{customer_id}/instruments` | Liefert nur die aktuell zugeordneten Instrumente; `200` oder bei unbekanntem Kunden `404` |
+| `POST`  | `/api/v1/customers`               | Legt einen Kunden an; `201` bei Erfolg                |
+| `PATCH` | `/api/v1/customers/{customer_id}` | Ändert angegebene Kundendaten; `200`, bei unbekannter ID `404` |
+| `DELETE` | `/api/v1/customers/{customer_id}` | Löscht einen Kunden dauerhaft; `204` ohne Inhalt, bei unbekannter ID `404` |
+| `POST` | `/api/v1/instruments` | Registriert ein Instrument; `201`, bei unbekanntem Kunden `404` |
+| `GET` | `/api/v1/instruments` | Liefert alle registrierten Instrumente als Liste; `200`, auch bei leerer Liste |
+| `GET` | `/api/v1/instruments/{instrument_id}` | Liefert Instrumentdetails mit optionaler Kunden-ID; `200`, bei unbekannter ID `404` |
+| `PATCH` | `/api/v1/instruments/{instrument_id}` | Ändert Instrumentdetails und Kundenzuordnung; `200`, bei unbekanntem Instrument oder Kunden `404` |
+| `DELETE` | `/api/v1/instruments/{instrument_id}` | Löscht ein Instrument dauerhaft; `204` ohne Inhalt, bei unbekannter ID `404` |
 
 **Aktuelles Kundenmodell:** numerische ID, Vorname, Nachname, E-Mail-Adresse und optionale Telefonnummer. Kundendaten können teilweise aktualisiert werden. Kunden können dauerhaft gelöscht werden. Suche, Filter und Pagination sind noch nicht implementiert.
 
 ### Kundendaten aktualisieren
 
-`PATCH /customers/{customer_id}` aktualisiert nur die übergebenen Felder und liefert den vollständigen aktualisierten Kunden zurück. Die ID wird ausschließlich im Pfad angegeben. Beispiel bei laufendem Entwicklungsserver:
+`PATCH /api/v1/customers/{customer_id}` aktualisiert nur die übergebenen Felder und liefert den vollständigen aktualisierten Kunden zurück. Die ID wird ausschließlich im Pfad angegeben. Beispiel bei laufendem Entwicklungsserver:
 
 ```bash
-curl --fail-with-body -X PATCH -b /private/tmp/atelier-cookies.txt -H 'Origin: http://127.0.0.1:8000' -H 'X-CSRF-Protection: 1' http://127.0.0.1:8000/customers/1 \
+curl --fail-with-body -X PATCH -b /private/tmp/atelier-cookies.txt -H 'Origin: http://127.0.0.1:8000' -H 'X-CSRF-Protection: 1' http://127.0.0.1:8000/api/v1/customers/1 \
   -H 'Content-Type: application/json' \
   -d '{"first_name":"Maria","email":"maria@example.com","phone":null}'
 ```
@@ -69,17 +69,17 @@ Nicht angegebene Felder bleiben unverändert. `phone: null` entfernt die Telefon
 
 ### Kunden löschen
 
-`DELETE /customers/{customer_id}` löscht den Kunden dauerhaft aus der Datenbank. Nach erfolgreichem Commit liefert die API HTTP 204 ohne Antwortinhalt. Der Kunde erscheint nicht mehr in der Kundenliste; ein anschließender Abruf oder erneutes Löschen liefert HTTP 404 mit `Customer not found`. Ungültige ID-Formate liefern HTTP 422. Andere Kunden bleiben unverändert.
+`DELETE /api/v1/customers/{customer_id}` löscht den Kunden dauerhaft aus der Datenbank. Nach erfolgreichem Commit liefert die API HTTP 204 ohne Antwortinhalt. Der Kunde erscheint nicht mehr in der Kundenliste; ein anschließender Abruf oder erneutes Löschen liefert HTTP 404 mit `Customer not found`. Ungültige ID-Formate liefern HTTP 422. Andere Kunden bleiben unverändert.
 
 ```bash
-curl --fail-with-body -i -X DELETE -b /private/tmp/atelier-cookies.txt -H 'Origin: http://127.0.0.1:8000' -H 'X-CSRF-Protection: 1' http://127.0.0.1:8000/customers/1
+curl --fail-with-body -i -X DELETE -b /private/tmp/atelier-cookies.txt -H 'Origin: http://127.0.0.1:8000' -H 'X-CSRF-Protection: 1' http://127.0.0.1:8000/api/v1/customers/1
 ```
 
 Der Endpunkt benötigt keinen Request-Body und ist unter `/docs` dokumentiert. Zugeordnete Instrumente bleiben beim Löschen eines Kunden erhalten; die Datenbank setzt deren `customer_id` auf `null`. Es werden keine Archivierung oder kaskadierenden Löschungen von Instrumenten implementiert.
 
 ### Instrumentmodell
 
-Das Feature `atelier_api.instruments` enthält das Tabellenmodell `Instrument` sowie `InstrumentCreate`, `InstrumentRead` und `InstrumentUpdate`. `POST /instruments` registriert Instrumente über einen validierten JSON-Request und liefert den vollständigen gespeicherten Datensatz einschließlich ID zurück.
+Das Feature `atelier_api.instruments` enthält das Tabellenmodell `Instrument` sowie `InstrumentCreate`, `InstrumentRead` und `InstrumentUpdate`. `POST /api/v1/instruments` registriert Instrumente über einen validierten JSON-Request und liefert den vollständigen gespeicherten Datensatz einschließlich ID zurück.
 
 | Feld | Bedeutung / Validierung |
 | --- | --- |
@@ -104,38 +104,38 @@ Ein Downgrade dieser Revision entfernt die Instrumenttabelle einschließlich ihr
 
 ### Instrumente eines Kunden anzeigen
 
-`GET /customers/{customer_id}/instruments` liefert HTTP 200 und eine Liste nach `list[InstrumentRead]`. Die Abfrage prüft zuerst, ob der Kunde existiert, und filtert danach in PostgreSQL nach `instrument.customer_id`. Instrumente anderer Kunden und unzugeordnete Instrumente werden nicht zurückgegeben.
+`GET /api/v1/customers/{customer_id}/instruments` liefert HTTP 200 und eine Liste nach `list[InstrumentRead]`. Die Abfrage prüft zuerst, ob der Kunde existiert, und filtert danach in PostgreSQL nach `instrument.customer_id`. Instrumente anderer Kunden und unzugeordnete Instrumente werden nicht zurückgegeben.
 
 ```bash
-curl --fail-with-body -b /private/tmp/atelier-cookies.txt -H 'Origin: http://127.0.0.1:8000' -H 'X-CSRF-Protection: 1' http://127.0.0.1:8000/customers/1/instruments
+curl --fail-with-body -b /private/tmp/atelier-cookies.txt -H 'Origin: http://127.0.0.1:8000' -H 'X-CSRF-Protection: 1' http://127.0.0.1:8000/api/v1/customers/1/instruments
 ```
 
 Ein bestehender Kunde ohne Instrumente erhält `[]`; ein unbekannter Kunde erhält HTTP 404 mit `Customer not found`. Ein ungültiges ID-Format ergibt HTTP 422. Der Endpunkt erscheint unter `/docs` im Bereich `customers`. Die Liste bildet die **aktuelle Zuordnung** ab: Nach einem Kundenwechsel erscheint das Instrument beim neuen Kunden; nach Aufheben der Zuordnung bei keinem Kunden. Frühere Eigentümer oder Zuordnungen werden nicht historisiert. Es gibt noch keine Pagination oder festgelegte Sortierreihenfolge.
 
 ### Instrumente auflisten
 
-`GET /instruments` liefert HTTP 200 und eine JSON-Liste mit dem Antwortschema `list[InstrumentRead]`. Jeder Eintrag enthält ID, Typ, Hersteller, Baujahr, Identifikationsnummer, Notizen und die optionale Kunden-ID. Unzugeordnete Instrumente werden ebenfalls angezeigt. Sind keine Instrumente vorhanden, ist die Antwort `[]`. Eine Sortierreihenfolge oder Pagination ist noch nicht festgelegt. Der Endpunkt erscheint unter `/docs`.
+`GET /api/v1/instruments` liefert HTTP 200 und eine JSON-Liste mit dem Antwortschema `list[InstrumentRead]`. Jeder Eintrag enthält ID, Typ, Hersteller, Baujahr, Identifikationsnummer, Notizen und die optionale Kunden-ID. Unzugeordnete Instrumente werden ebenfalls angezeigt. Sind keine Instrumente vorhanden, ist die Antwort `[]`. Eine Sortierreihenfolge oder Pagination ist noch nicht festgelegt. Der Endpunkt erscheint unter `/docs`.
 
 ```bash
-curl --fail -b /private/tmp/atelier-cookies.txt -H 'Origin: http://127.0.0.1:8000' -H 'X-CSRF-Protection: 1' http://127.0.0.1:8000/instruments
+curl --fail -b /private/tmp/atelier-cookies.txt -H 'Origin: http://127.0.0.1:8000' -H 'X-CSRF-Protection: 1' http://127.0.0.1:8000/api/v1/instruments
 ```
 
 ### Einzelnes Instrument abrufen
 
-`GET /instruments/{instrument_id}` liefert HTTP 200 mit dem Schema `InstrumentRead`: ID, Typ, Hersteller, Baujahr, Identifikationsnummer, Notizen und die zugeordnete `customer_id`. Bei Instrumenten ohne Kundenzuordnung ist `customer_id` gleich `null`. Es wird keine Kundeninstanz eingebettet. Nach dem Löschen eines zugeordneten Kunden bleibt das Instrument abrufbar und die Kunden-ID wird `null`.
+`GET /api/v1/instruments/{instrument_id}` liefert HTTP 200 mit dem Schema `InstrumentRead`: ID, Typ, Hersteller, Baujahr, Identifikationsnummer, Notizen und die zugeordnete `customer_id`. Bei Instrumenten ohne Kundenzuordnung ist `customer_id` gleich `null`. Es wird keine Kundeninstanz eingebettet. Nach dem Löschen eines zugeordneten Kunden bleibt das Instrument abrufbar und die Kunden-ID wird `null`.
 
 ```bash
-curl --fail-with-body -b /private/tmp/atelier-cookies.txt -H 'Origin: http://127.0.0.1:8000' -H 'X-CSRF-Protection: 1' http://127.0.0.1:8000/instruments/1
+curl --fail-with-body -b /private/tmp/atelier-cookies.txt -H 'Origin: http://127.0.0.1:8000' -H 'X-CSRF-Protection: 1' http://127.0.0.1:8000/api/v1/instruments/1
 ```
 
 Eine unbekannte Instrument-ID liefert HTTP 404 mit `Instrument not found`; ein ungültiges ID-Format liefert HTTP 422. Der Endpunkt ist unter `/docs` dokumentiert.
 
 ### Instrument aktualisieren
 
-`PATCH /instruments/{instrument_id}` ändert nur die angegebenen Felder und liefert mit HTTP 200 den vollständigen aktualisierten Datensatz nach `InstrumentRead` zurück:
+`PATCH /api/v1/instruments/{instrument_id}` ändert nur die angegebenen Felder und liefert mit HTTP 200 den vollständigen aktualisierten Datensatz nach `InstrumentRead` zurück:
 
 ```bash
-curl --fail-with-body -X PATCH -b /private/tmp/atelier-cookies.txt -H 'Origin: http://127.0.0.1:8000' -H 'X-CSRF-Protection: 1' http://127.0.0.1:8000/instruments/1 \
+curl --fail-with-body -X PATCH -b /private/tmp/atelier-cookies.txt -H 'Origin: http://127.0.0.1:8000' -H 'X-CSRF-Protection: 1' http://127.0.0.1:8000/api/v1/instruments/1 \
   -H 'Content-Type: application/json' \
   -d '{"maker":"Updated maker","year_of_manufacture":1930,"customer_id":2}'
 ```
@@ -146,18 +146,18 @@ Ein unbekanntes Instrument ergibt HTTP 404 mit `Instrument not found`. Ein unbek
 
 ### Instrument löschen
 
-`DELETE /instruments/{instrument_id}` löscht ein Instrument dauerhaft und liefert nach erfolgreichem Commit HTTP 204 ohne Antwortinhalt. Die zugeordnete Kundenakte und andere Instrumente bleiben unverändert. Das gelöschte Instrument erscheint nicht mehr in `GET /instruments`; Einzelabruf und erneutes Löschen ergeben HTTP 404 mit `Instrument not found`. Ungültige ID-Formate ergeben HTTP 422. Der Endpunkt benötigt keinen Request-Body und ist unter `/docs` dokumentiert.
+`DELETE /api/v1/instruments/{instrument_id}` löscht ein Instrument dauerhaft und liefert nach erfolgreichem Commit HTTP 204 ohne Antwortinhalt. Die zugeordnete Kundenakte und andere Instrumente bleiben unverändert. Das gelöschte Instrument erscheint nicht mehr in `GET /api/v1/instruments`; Einzelabruf und erneutes Löschen ergeben HTTP 404 mit `Instrument not found`. Ungültige ID-Formate ergeben HTTP 422. Der Endpunkt benötigt keinen Request-Body und ist unter `/docs` dokumentiert.
 
 ```bash
-curl --fail-with-body -i -X DELETE -b /private/tmp/atelier-cookies.txt -H 'Origin: http://127.0.0.1:8000' -H 'X-CSRF-Protection: 1' http://127.0.0.1:8000/instruments/1
+curl --fail-with-body -i -X DELETE -b /private/tmp/atelier-cookies.txt -H 'Origin: http://127.0.0.1:8000' -H 'X-CSRF-Protection: 1' http://127.0.0.1:8000/api/v1/instruments/1
 ```
 
 ### Instrument registrieren
 
-Nach Anwendung der Migrationen akzeptiert `POST /instruments` beispielsweise:
+Nach Anwendung der Migrationen akzeptiert `POST /api/v1/instruments` beispielsweise:
 
 ```bash
-curl --fail-with-body -X POST -b /private/tmp/atelier-cookies.txt -H 'Origin: http://127.0.0.1:8000' -H 'X-CSRF-Protection: 1' http://127.0.0.1:8000/instruments \
+curl --fail-with-body -X POST -b /private/tmp/atelier-cookies.txt -H 'Origin: http://127.0.0.1:8000' -H 'X-CSRF-Protection: 1' http://127.0.0.1:8000/api/v1/instruments \
   -H 'Content-Type: application/json' \
   -d '{"type":"violin","maker":"Example maker","year_of_manufacture":1920,"identification_number":"LABEL-42","notes":"Reparierte Decke.","customer_id":1}'
 ```
@@ -216,14 +216,14 @@ Kunden können ohne Benutzerkonto bestehen. Eine gleiche E-Mail erzeugt keine Zu
 
 Kundenanmeldung ist standardmäßig durch `CUSTOMER_PORTAL_AUTH_ENABLED=false`
 gesperrt. Die technische Freigabe `true` erlaubt nur aktiven Konten mit
-Kundenzuordnung die Anmeldung und `/auth/me`. Auch dann bleiben interne
+Kundenzuordnung die Anmeldung und `/api/v1/auth/me`. Auch dann bleiben interne
 Kunden- und Instrument-Routen mit HTTP 403 gesperrt. Einladungen und eine
 Kundenportal-Oberfläche sind noch nicht implementiert.
 
 #### Sichere Sitzungsanmeldung
 
 Nach `make db-migrate` und dem oben beschriebenen Benutzer-Bootstrap stehen
-`POST /auth/login`, `POST /auth/logout` und `GET /auth/me` bereit.
+`POST /api/v1/auth/login`, `POST /api/v1/auth/logout` und `GET /api/v1/auth/me` bereit.
 Login akzeptiert JSON mit `email` und `password`; die E-Mail wird getrimmt und
 kleingeschrieben. Passwortprüfung erfolgt über Argon2id. Unbekannte E-Mail,
 ungültige E-Mail, falsches Passwort, inaktive Konten und gesperrte Portalrollen
@@ -246,6 +246,17 @@ fehlende Cookies ergeben 401. Deaktivierung, Rollen-, Passwort- und
 Kundenzuordnungsänderungen widerrufen bestehende Sitzungen auch im
 Datenbanktrigger; Reaktivierung macht alte Cookies nicht wieder gültig.
 Autorisierung erfolgt separat durch `require_internal_user`.
+
+Die App prüft beim Aufbau jede FastAPI-Route. Ohne ausdrücklichen Eintrag als
+öffentliche Operation muss ihre Dependency-Kette `get_current_user` enthalten;
+andernfalls bricht der Start mit einem Konfigurationsfehler ab. Öffentlich sind
+nur `/`, `GET /health/live`, `GET /health/ready`, Login und der idempotente,
+CSRF-geschützte Logout. Dadurch werden neue Business-Router standardmäßig
+abgewiesen, bis sie die zentrale Authentifizierungsabhängigkeit erhalten.
+Interne Router erhalten zusätzlich zentral `require_internal_user`; die
+einzelnen Customer- und Instrument-Handler duplizieren keine Rollenprüfung.
+Künftige Reparatur-, Miet-, Rechnungs- und Dokumentrouter müssen auf dieselbe
+Weise als interne Router registriert werden.
 
 Logout benötigt dieselben CSRF-Header wie Login, widerruft die Sitzung in
 PostgreSQL und entfernt das Cookie mit identischen Sicherheitsattributen.
@@ -275,6 +286,10 @@ Das Cookie heißt `__Host-session`, mit `Secure; HttpOnly; SameSite=Lax; Path=/`
 und ohne `Domain`. Es bleibt ausschließlich an den API-Host gebunden.
 Produktionsanfragen über HTTP werden abgewiesen; Sicherheitsattribute lassen
 sich dort nicht einzeln abschalten.
+Swagger UI (`/docs`), ReDoc (`/redoc`) und das öffentliche OpenAPI-Dokument
+(`/openapi.json`) existieren ausschließlich in `development`. Mit
+`ENVIRONMENT=production` werden alle drei Routen entfernt; die interne
+`app.openapi()`-Erzeugung für Tests und Werkzeugbau bleibt verfügbar.
 
 Für lokale HTTP-Entwicklung heißt das getrennte Cookie `dev-session` und
 verzichtet auf `Secure`. Frontend und API sollten beide `localhost` oder
@@ -297,15 +312,15 @@ Anmeldeformular:
 
 ```javascript
 const api = "http://localhost:8000"; // Produktion: https://api.example.com
-const login = await fetch(api + "/auth/login", {
+const login = await fetch(api + "/api/v1/auth/login", {
   method: "POST",
   credentials: "include",
   headers: { "Content-Type": "application/json", "X-CSRF-Protection": "1" },
   body: JSON.stringify({ email, password }),
 });
 if (!login.ok) throw new Error("Anmeldung fehlgeschlagen");
-const me = await fetch(api + "/auth/me", { credentials: "include" });
-const logout = await fetch(api + "/auth/logout", {
+const me = await fetch(api + "/api/v1/auth/me", { credentials: "include" });
+const logout = await fetch(api + "/api/v1/auth/logout", {
   method: "POST",
   credentials: "include",
   headers: { "X-CSRF-Protection": "1" },
@@ -364,6 +379,117 @@ Die neue Migration `c91e4a702b68` baut auf `b75d90ae3214` auf. Bestehende Konten
 - **Mittel:** Eine Konfiguration für den produktiven Betrieb steht noch aus.
 
 Die Anwendungsmodule einschließlich `customers`, `instruments` und `health` werden gemeinsam als Paket `atelier_api` ausgeliefert. Der CLI-Einstiegspunkt lautet `atelier_api.cli:main`. Die CI prüft Lint, Typen, Tests, Datenbankmigrationen sowie die Installation und Imports des gebauten Wheels in einer separaten Umgebung.
+
+### 2.1 API-Version und Software-Releases
+
+Die HTTP-Vertragsversion und die installierte Softwareversion sind unabhängig:
+
+- Die aktuelle API-Version ist `v1`. Authentifizierung sowie alle fachlichen
+  Customer- und Instrument-Routen liegen unter `/api/v1`. Health-Endpunkte
+  bleiben als Infrastruktur-Schnittstellen unter `/health/live` und
+  `/health/ready` unversioniert. Die einzelnen Feature-Router kennen den
+  Versionspräfix nicht; `main.py` setzt ihn einmal über einen übergeordneten
+  FastAPI-`APIRouter`.
+- Die Softwareversion folgt `MAJOR.MINOR.PATCH` und steht ausschließlich in
+  `pyproject.toml` unter `project.version`. FastAPI und installierte Werkzeuge
+  lesen sie aus den Paketmetadaten. Ein Release von `0.1.0` auf `0.2.0` ändert
+  deshalb nicht automatisch `/api/v1`.
+
+Die früheren unversionierten Business-Routen werden nicht parallel angeboten.
+Bestehende Clients müssen `/auth`, `/customers` und `/instruments` auf
+`/api/v1/auth`, `/api/v1/customers` und `/api/v1/instruments` umstellen. Das ist
+eine bewusste Vertragsmigration; doppelte Routen würden Sicherheitstests und
+langfristige Abschaltung erschweren. Im Repository wurde kein separates
+Frontend gefunden. Dessen API-Basis muss bei Integration ebenfalls `/api/v1`
+enthalten.
+
+Eine spätere Softwareversion `0.8.0` oder `1.4.2` bleibt bei `/api/v1`, solange
+der Vertrag kompatibel erweitert werden kann. Erst eine tatsächlich
+inkompatible HTTP-Vertragsänderung erhält einen neuen zentralen Router mit
+`/api/v2`. V1 und V2 benötigen dann getrennte Kompatibilitätstests und eine
+dokumentierte Ablösefrist; Ressourcen-Router dürfen nicht einfach global
+umbenannt werden.
+
+#### Conventional Commits und Versionsberechnung
+
+[Python Semantic Release](https://python-semantic-release.readthedocs.io/) liest
+Commits seit dem letzten `vMAJOR.MINOR.PATCH`-Tag. Die Regeln sind ausdrücklich
+in `pyproject.toml` konfiguriert:
+
+| Commit | Releasewirkung |
+| --- | --- |
+| `feat: add repair intake` | Minor, beispielsweise `0.1.0 → 0.2.0` |
+| `fix: reject invalid owner` | Patch, beispielsweise `0.2.0 → 0.2.1` |
+| `perf: reduce customer queries` | Patch |
+| `docs:`, `test:`, `refactor:`, `chore:`, `ci:` | Kein Release allein |
+| `feat!: replace customer contract` oder Footer `BREAKING CHANGE:` | Breaking |
+
+Solange das Projekt in `0.x.x` ist, sind `allow_zero_version=true` und
+`major_on_zero=false` gesetzt. Ein Breaking Change aus `0.1.0` wird deshalb
+`0.2.0`, nicht sofort `1.0.0`. Für den ersten stabilen Vertrag wird
+`major_on_zero=true` gesetzt und die Änderung ausdrücklich als Breaking Change
+committed. Beispiele für gültige Nachrichten:
+
+```text
+feat(instruments): store insurance value
+fix(auth): reject revoked session before data access
+docs: explain Neon test database
+refactor(customers): separate query service
+feat(api)!: replace customer response fields
+```
+
+Pull Requests erzeugen keine Releases. Nach einem Merge führt die CI auf `main`
+Lint, Formatprüfung, Typprüfung, Paketinstallation, Migrationen und sämtliche
+PostgreSQL-Tests aus. Nur nach einem erfolgreichen Push-CI-Lauf startet
+`.github/workflows/release.yaml`. Der Workflow prüft, dass sein Checkout exakt
+dem getesteten Commit entspricht, und führt dann atomar folgende Schritte aus:
+
+1. Conventional Commits analysieren; ohne relevante Änderung sauber beenden.
+2. `project.version` und `CHANGELOG.md` aktualisieren.
+3. Mit `uv lock --upgrade-package atelier-api` nur den lokalen Paketeintrag im
+   Lockfile synchronisieren und reproduzierbare Artefakte bauen.
+4. Den Release-Commit `chore(release): … [skip ci]` und Tag `v…` pushen.
+5. Einen GitHub Release erstellen und Wheel sowie Source-Archiv anhängen.
+
+Es erfolgt keine Veröffentlichung auf PyPI. `GITHUB_TOKEN`-erzeugte Commits und
+Tags starten bei GitHub keine weiteren Workflows. Das verhindert Rekursion; ein
+späteres Deployment muss deshalb als nachgelagerter Job desselben
+Release-Workflows an `steps.release.outputs.released` gekoppelt werden und darf
+nicht blind auf einen neuen Tag-Workflow vertrauen.
+
+Die installierte Version lässt sich unabhängig vom Quellverzeichnis prüfen:
+
+```bash
+uv run python -c 'from importlib.metadata import version; print(version("atelier-api"))'
+```
+
+Eine lokale, nicht veröffentlichende Prüfung auf `main` lautet:
+
+```bash
+uv run semantic-release --noop version --print
+```
+
+Eine manuelle Veröffentlichung ist nur für einen geprüften, sauberen
+`main`-Stand vorgesehen. Mit einem kurzlebigen, auf `contents: write`
+beschränkten GitHub-Token werden dann `uv run semantic-release version` und bei
+Bedarf `uv run semantic-release publish --tag vX.Y.Z` ausgeführt. Diese Befehle
+erzeugen echte Commits, Tags und Releases und sind keine normale lokale
+Entwicklungsaktion.
+
+Schlägt ein Release vor dem Push fehl, wird die Ursache behoben und derselbe
+Workflow erneut gestartet. Wurden Commit, Tag und GitHub Release bereits
+erstellt, aber Artefakte fehlen, wird ausschließlich `semantic-release publish
+--tag vX.Y.Z` wiederholt; veröffentlichte Tags werden nicht verschoben oder
+überschrieben. Bei einem falschen veröffentlichten Release folgt ein neuer
+Korrektur-Release statt History-Rewrite oder Force-Push.
+
+Der Release-Job besitzt nur `contents: write` und `id-token: write`. Geschützte
+`main`-Branches können den automatischen Versionscommit blockieren. Dann muss
+die Repository-Regel entweder GitHub Actions ausdrücklich für diesen Workflow
+zulassen oder ein GitHub-App-Token mit minimalem `contents: write`, kurzer
+Lebensdauer und gezielter Ruleset-Freigabe als `github_token` verwendet werden.
+Branch-Schutz darf nicht still umgangen werden. Erforderliche CI-Checks bleiben
+als Pull-Request-Regel aktiv.
 
 ## 3. Geplanter Funktionsumfang
 

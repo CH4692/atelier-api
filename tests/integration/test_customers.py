@@ -14,7 +14,7 @@ def test_create_and_retrieve_customer(postgres_client, db_connection, phone):
         "email": "maria@example.com",
         "phone": phone,
     }
-    response = postgres_client.post("/customers", json=payload)
+    response = postgres_client.post("/api/v1/customers", json=payload)
     assert response.status_code == 201
     created = response.json()
     assert isinstance(created["id"], int)
@@ -29,25 +29,25 @@ def test_create_and_retrieve_customer(postgres_client, db_connection, phone):
         assert stored is not None
         assert stored.model_dump() == created
 
-    response = postgres_client.get(f"/customers/{created['id']}")
+    response = postgres_client.get(f"/api/v1/customers/{created['id']}")
     assert response.status_code == 200
     assert response.json() == created
-    response = postgres_client.get("/customers")
+    response = postgres_client.get("/api/v1/customers")
     assert response.status_code == 200
     assert response.json() == [created]
 
 
 def test_customer_list_starts_empty(postgres_client):
-    response = postgres_client.get("/customers")
+    response = postgres_client.get("/api/v1/customers")
     assert response.status_code == 200
     assert response.json() == []
 
 
 def test_committed_test_data_does_not_leak(postgres_client, db_connection):
-    assert postgres_client.get("/customers").json() == []
+    assert postgres_client.get("/api/v1/customers").json() == []
     for name in ("Jon", "Maria"):
         response = postgres_client.post(
-            "/customers",
+            "/api/v1/customers",
             json={
                 "first_name": name,
                 "last_name": "Doe",
@@ -62,14 +62,14 @@ def test_committed_test_data_does_not_leak(postgres_client, db_connection):
 
 
 def test_missing_customer_returns_404(postgres_client):
-    response = postgres_client.get("/customers/999999")
+    response = postgres_client.get("/api/v1/customers/999999")
     assert response.status_code == 404
     assert response.json() == {"detail": "Customer not found"}
 
 
 def test_invalid_customer_is_not_persisted(postgres_client):
     response = postgres_client.post(
-        "/customers",
+        "/api/v1/customers",
         json={
             "first_name": "Jon",
             "last_name": "Doe",
@@ -77,7 +77,7 @@ def test_invalid_customer_is_not_persisted(postgres_client):
         },
     )
     assert response.status_code == 422
-    assert postgres_client.get("/customers").json() == []
+    assert postgres_client.get("/api/v1/customers").json() == []
 
 
 def test_delete_customer_removes_record_and_preserves_other_customers(
@@ -86,7 +86,7 @@ def test_delete_customer_removes_record_and_preserves_other_customers(
     created = []
     for name in ("Jon", "Maria"):
         response = postgres_client.post(
-            "/customers",
+            "/api/v1/customers",
             json={
                 "first_name": name,
                 "last_name": "Doe",
@@ -96,7 +96,7 @@ def test_delete_customer_removes_record_and_preserves_other_customers(
         assert response.status_code == 201
         created.append(response.json())
     deleted, retained = created
-    path = f"/customers/{deleted['id']}"
+    path = f"/api/v1/customers/{deleted['id']}"
 
     response = postgres_client.delete(path)
     assert response.status_code == 204
@@ -112,20 +112,20 @@ def test_delete_customer_removes_record_and_preserves_other_customers(
     response = postgres_client.get(path)
     assert response.status_code == 404
     assert response.json() == {"detail": "Customer not found"}
-    response = postgres_client.get("/customers")
+    response = postgres_client.get("/api/v1/customers")
     assert response.status_code == 200
     assert response.json() == [retained]
     response = postgres_client.delete(path)
     assert response.status_code == 404
     assert response.json() == {"detail": "Customer not found"}
-    assert postgres_client.get("/customers").json() == [retained]
+    assert postgres_client.get("/api/v1/customers").json() == [retained]
 
 
 def test_delete_unknown_customer_does_not_change_database(postgres_client):
-    response = postgres_client.delete("/customers/999999")
+    response = postgres_client.delete("/api/v1/customers/999999")
     assert response.status_code == 404
     assert response.json() == {"detail": "Customer not found"}
-    assert postgres_client.get("/customers").json() == []
+    assert postgres_client.get("/api/v1/customers").json() == []
 
 
 def test_customer_lifecycle_with_persisted_update(postgres_client, db_connection):
@@ -135,10 +135,10 @@ def test_customer_lifecycle_with_persisted_update(postgres_client, db_connection
         "email": "jon@example.com",
         "phone": "+49176123456789",
     }
-    response = postgres_client.post("/customers", json=payload)
+    response = postgres_client.post("/api/v1/customers", json=payload)
     assert response.status_code == 201
     created = response.json()
-    path = f"/customers/{created['id']}"
+    path = f"/api/v1/customers/{created['id']}"
     response = postgres_client.get(path)
     assert response.status_code == 200
     assert response.json() == created
@@ -164,7 +164,7 @@ def test_customer_lifecycle_with_persisted_update(postgres_client, db_connection
     response = postgres_client.get(path)
     assert response.status_code == 200
     assert response.json() == updated
-    response = postgres_client.get("/customers")
+    response = postgres_client.get("/api/v1/customers")
     assert response.status_code == 200
     assert response.json() == [updated]
 
@@ -174,7 +174,7 @@ def test_customer_lifecycle_with_persisted_update(postgres_client, db_connection
     response = postgres_client.delete(path)
     assert response.status_code == 204
     assert response.content == b""
-    assert postgres_client.get("/customers").json() == []
+    assert postgres_client.get("/api/v1/customers").json() == []
     assert postgres_client.get(path).status_code == 404
     assert postgres_client.patch(path, json={"first_name": "Jon"}).status_code == 404
     assert postgres_client.delete(path).status_code == 404

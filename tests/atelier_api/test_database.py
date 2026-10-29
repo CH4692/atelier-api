@@ -5,7 +5,13 @@ from sqlalchemy.exc import InterfaceError, OperationalError, TimeoutError
 
 
 @pytest.mark.parametrize(
-    "path", ["/customers", "/instruments", "/instruments/1", "/customers/1/instruments"]
+    "path",
+    [
+        "/api/v1/customers",
+        "/api/v1/instruments",
+        "/api/v1/instruments/1",
+        "/api/v1/customers/1/instruments",
+    ],
 )
 @pytest.mark.parametrize("error_type", [OperationalError, InterfaceError, TimeoutError])
 def test_database_failure_returns_503_without_credentials(error_type, path, client):

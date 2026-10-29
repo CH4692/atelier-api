@@ -2,10 +2,11 @@
 
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException, Request, Security
+from fastapi.security import APIKeyCookie
 
 from atelier_api.database import SessionDep
-from atelier_api.settings import Settings
+from atelier_api.settings import Settings, settings
 from atelier_api.users.models import User
 from atelier_api.users.roles import UserRole
 
@@ -18,6 +19,13 @@ def security_settings(request: Request) -> Settings:
 
 
 SecuritySettings = Annotated[Settings, Depends(security_settings)]
+_session_cookie_scheme = APIKeyCookie(
+    name=settings.session_cookie_name,
+    scheme_name="ServerSideSession",
+    description="Opaque server-side session cookie created by POST /api/v1/auth/login.",
+    auto_error=False,
+)
+DocumentedSessionCookie = Annotated[str | None, Security(_session_cookie_scheme)]
 
 
 def require_https(request: Request, config: SecuritySettings) -> None:
@@ -41,7 +49,10 @@ def validate_csrf(request: Request, config: SecuritySettings) -> None:
 
 
 def get_current_user(
-    request: Request, config: SecuritySettings, session: SessionDep
+    request: Request,
+    config: SecuritySettings,
+    session: SessionDep,
+    _documented_cookie: DocumentedSessionCookie,
 ) -> User:
     """Authenticate a live server-side session before any protected request."""
     require_https(request, config)

@@ -10,7 +10,7 @@ def test_instrument_management_lifecycle(postgres_client, db_connection):
     customers = []
     for name in ("Jon", "Maria"):
         response = postgres_client.post(
-            "/customers",
+            "/api/v1/customers",
             json={
                 "first_name": name,
                 "last_name": "Doe",
@@ -20,10 +20,10 @@ def test_instrument_management_lifecycle(postgres_client, db_connection):
         assert response.status_code == 201
         customers.append(response.json())
     first_customer, next_customer = customers
-    first_list = f"/customers/{first_customer['id']}/instruments"
-    next_list = f"/customers/{next_customer['id']}/instruments"
+    first_list = f"/api/v1/customers/{first_customer['id']}/instruments"
+    next_list = f"/api/v1/customers/{next_customer['id']}/instruments"
     response = postgres_client.post(
-        "/instruments",
+        "/api/v1/instruments",
         json={
             "type": "violin",
             "maker": "Example maker",
@@ -37,8 +37,8 @@ def test_instrument_management_lifecycle(postgres_client, db_connection):
     created = response.json()
     assert isinstance(created["id"], int)
     assert created["id"] > 0
-    path = f"/instruments/{created['id']}"
-    for list_path in ("/instruments", first_list):
+    path = f"/api/v1/instruments/{created['id']}"
+    for list_path in ("/api/v1/instruments", first_list):
         response = postgres_client.get(list_path)
         assert response.status_code == 200
         assert response.json() == [created]
@@ -68,7 +68,7 @@ def test_instrument_management_lifecycle(postgres_client, db_connection):
     response = postgres_client.delete(path)
     assert response.status_code == 204
     assert response.content == b""
-    assert postgres_client.get("/instruments").json() == []
+    assert postgres_client.get("/api/v1/instruments").json() == []
     assert postgres_client.get(next_list).json() == []
     with Session(
         bind=db_connection, join_transaction_mode="create_savepoint"
@@ -83,4 +83,7 @@ def test_instrument_management_lifecycle(postgres_client, db_connection):
         assert response.status_code == 404
         assert response.json() == {"detail": "Instrument not found"}
     for customer in customers:
-        assert postgres_client.get(f"/customers/{customer['id']}").status_code == 200
+        assert (
+            postgres_client.get(f"/api/v1/customers/{customer['id']}").status_code
+            == 200
+        )

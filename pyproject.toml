@@ -26,6 +26,11 @@ atelier-api = "atelier_api.cli:main"
 atelier-users = "atelier_api.users.cli:main"
 atelier-sessions-cleanup = "atelier_api.auth.cli:main"
 
+[project.optional-dependencies]
+build = [
+    "uv==0.13.1",
+]
+
 [build-system]
 requires = ["uv_build>=0.13.1,<0.14.0"]
 build-backend = "uv_build"
@@ -36,6 +41,7 @@ dev = [
     "mypy>=2.4.0",
     "pydantic>=2.14.1",
     "pytest>=9.1.1",
+    "python-semantic-release>=10.7.0,<11",
     "ruff>=0.17.1",
 ]
 
@@ -47,6 +53,48 @@ plugins = ["pydantic.mypy"]
 testpaths = ["tests"]
 addopts = "--strict-markers"
 markers = ["integration: requires a dedicated PostgreSQL TEST_DATABASE_URL"]
+
+[tool.semantic_release]
+allow_zero_version = true
+major_on_zero = false
+commit_parser = "conventional"
+commit_message = "chore(release): {version} [skip ci]"
+tag_format = "v{version}"
+version_toml = ["pyproject.toml:project.version:nf"]
+build_command = """
+python -m pip install -e '.[build]'
+uv lock --upgrade-package "$PACKAGE_NAME"
+git add uv.lock
+uv build
+"""
+
+[tool.semantic_release.branches.main]
+match = "main"
+prerelease = false
+
+[tool.semantic_release.commit_parser_options]
+allowed_tags = ["feat", "fix", "perf", "docs", "test", "refactor", "chore", "ci"]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]
+other_allowed_tags = ["docs", "test", "refactor", "chore", "ci"]
+default_bump_level = 0
+parse_squash_commits = true
+ignore_merge_commits = true
+
+[tool.semantic_release.changelog]
+mode = "update"
+
+[tool.semantic_release.changelog.default_templates]
+changelog_file = "CHANGELOG.md"
+output_format = "md"
+mask_initial_release = false
+
+[tool.semantic_release.publish]
+dist_glob_patterns = ["dist/*"]
+upload_to_vcs_release = true
+
+[tool.semantic_release.remote]
+type = "github"
 
 [tool.ruff]
 target-version = "py314"

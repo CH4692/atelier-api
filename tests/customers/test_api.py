@@ -31,7 +31,7 @@ test_customer = Customer(
 
 def test_get_customers(client, mock_session):
     mock_session.exec.return_value.all.return_value = testdata_customers
-    response = client.get("/customers")
+    response = client.get("/api/v1/customers")
     assert response.status_code == 200
     expected_json = [
         CustomerRead.model_validate(c).model_dump() for c in testdata_customers
@@ -41,7 +41,7 @@ def test_get_customers(client, mock_session):
 
 def test_get_customer_by_id(client, mock_session):
     mock_session.get.return_value = test_customer
-    response = client.get("/customers/1")
+    response = client.get("/api/v1/customers/1")
     assert response.status_code == 200
     expected_json = CustomerRead.model_validate(test_customer).model_dump(mode="json")
     assert response.json() == expected_json
@@ -50,14 +50,14 @@ def test_get_customer_by_id(client, mock_session):
 
 def test_get_customer_by_id_not_found(client, mock_session):
     mock_session.get.return_value = None
-    response = client.get("/customers/999")
+    response = client.get("/api/v1/customers/999")
     assert response.status_code == 404
     assert response.json() == {"detail": "Customer not found"}
     mock_session.get.assert_called_once_with(Customer, 999)
 
 
 def test_get_customer_by_id_invalid_id(client, mock_session):
-    response = client.get("/customers/abc")
+    response = client.get("/api/v1/customers/abc")
     assert response.status_code == 422
     mock_session.get.assert_not_called()
 
@@ -72,7 +72,7 @@ def test_get_customer_by_id_not_found_for_boundary_values(
     customer_id,
 ):
     mock_session.get.return_value = None
-    response = client.get(f"/customers/{customer_id}")
+    response = client.get(f"/api/v1/customers/{customer_id}")
     assert response.status_code == 404
     mock_session.get.assert_called_once_with(
         Customer,
@@ -92,7 +92,7 @@ def test_create_customer(client, mock_session):
         customer.id = 1
 
     mock_session.refresh.side_effect = refresh_customer
-    response = client.post("/customers", json=payload)
+    response = client.post("/api/v1/customers", json=payload)
     assert response.status_code == 201
     mock_session.add.assert_called_once()
     saved_customer = mock_session.add.call_args.args[0]
@@ -106,13 +106,13 @@ def test_create_customer(client, mock_session):
 
 def test_get_customers_empty(client, mock_session):
     mock_session.exec.return_value.all.return_value = []
-    response = client.get("/customers")
+    response = client.get("/api/v1/customers")
     assert response.status_code == 200
     assert response.json() == []
 
 
 def test_create_customer_missing_required_fields(client, mock_session):
-    response = client.post("/customers", json={})
+    response = client.post("/api/v1/customers", json={})
     assert response.status_code == 422
     mock_session.add.assert_not_called()
     mock_session.commit.assert_not_called()
@@ -126,7 +126,7 @@ def test_create_customer_invalid_email(client, mock_session):
         "phone": "+49176123456789",
     }
 
-    response = client.post("/customers", json=payload)
+    response = client.post("/api/v1/customers", json=payload)
     assert response.status_code == 422
     mock_session.add.assert_not_called()
     mock_session.commit.assert_not_called()
@@ -153,7 +153,7 @@ def test_update_customer_all_fields(client, mock_session, update_target):
         "email": "maria@example.com",
         "phone": "+49123456789",
     }
-    response = client.patch("/customers/1", json=payload)
+    response = client.patch("/api/v1/customers/1", json=payload)
     assert response.status_code == 200
     assert response.json() == {"id": 1, **payload}
     mock_session.get.assert_called_once_with(Customer, 1)
@@ -164,21 +164,21 @@ def test_update_customer_all_fields(client, mock_session, update_target):
 
 def test_update_customer_preserves_omitted_fields(client, mock_session, update_target):
     before = update_target.model_dump()
-    response = client.patch("/customers/1", json={"first_name": "  Maria  "})
+    response = client.patch("/api/v1/customers/1", json={"first_name": "  Maria  "})
     assert response.status_code == 200
     assert response.json() == {**before, "first_name": "Maria"}
     mock_session.commit.assert_called_once()
 
 
 def test_update_customer_can_clear_phone(client, mock_session, update_target):
-    response = client.patch("/customers/1", json={"phone": None})
+    response = client.patch("/api/v1/customers/1", json={"phone": None})
     assert response.status_code == 200
     assert response.json()["phone"] is None
     mock_session.commit.assert_called_once()
 
 
 def test_update_customer_empty_body_is_noop(client, mock_session, update_target):
-    response = client.patch("/customers/1", json={})
+    response = client.patch("/api/v1/customers/1", json={})
     assert response.status_code == 200
     assert response.json() == update_target.model_dump()
     mock_session.commit.assert_not_called()
@@ -186,7 +186,7 @@ def test_update_customer_empty_body_is_noop(client, mock_session, update_target)
 
 def test_update_customer_unknown_id(client, mock_session):
     mock_session.get.return_value = None
-    response = client.patch("/customers/999", json={"first_name": "Maria"})
+    response = client.patch("/api/v1/customers/999", json={"first_name": "Maria"})
     assert response.status_code == 404
     assert response.json() == {"detail": "Customer not found"}
     mock_session.commit.assert_not_called()
@@ -208,26 +208,26 @@ def test_update_customer_unknown_id(client, mock_session):
     ],
 )
 def test_update_customer_rejects_invalid_data(client, mock_session, payload):
-    response = client.patch("/customers/1", json=payload)
+    response = client.patch("/api/v1/customers/1", json=payload)
     assert response.status_code == 422
     mock_session.get.assert_not_called()
     mock_session.commit.assert_not_called()
 
 
 def test_update_customer_rejects_invalid_id(client, mock_session):
-    response = client.patch("/customers/abc", json={"first_name": "Maria"})
+    response = client.patch("/api/v1/customers/abc", json={"first_name": "Maria"})
     assert response.status_code == 422
     mock_session.get.assert_not_called()
 
 
 def test_update_customer_requires_request_body(client, mock_session):
-    response = client.patch("/customers/1")
+    response = client.patch("/api/v1/customers/1")
     assert response.status_code == 422
     mock_session.commit.assert_not_called()
 
 
 def test_update_customer_documented_in_openapi():
-    operation = app.openapi()["paths"]["/customers/{customer_id}"]["patch"]
+    operation = app.openapi()["paths"]["/api/v1/customers/{customer_id}"]["patch"]
     assert operation["requestBody"]["required"] is True
     assert {"200", "404", "422"} <= operation["responses"].keys()
     assert operation["requestBody"]["content"]["application/json"]["schema"][
@@ -236,7 +236,7 @@ def test_update_customer_documented_in_openapi():
 
 
 def test_delete_customer_returns_empty_204(client, mock_session, update_target):
-    response = client.delete("/customers/1")
+    response = client.delete("/api/v1/customers/1")
     assert response.status_code == 204
     assert response.content == b""
     mock_session.get.assert_called_once_with(Customer, 1)
@@ -246,7 +246,7 @@ def test_delete_customer_returns_empty_204(client, mock_session, update_target):
 
 def test_delete_customer_unknown_id(client, mock_session):
     mock_session.get.return_value = None
-    response = client.delete("/customers/999999")
+    response = client.delete("/api/v1/customers/999999")
     assert response.status_code == 404
     assert response.json() == {"detail": "Customer not found"}
     mock_session.delete.assert_not_called()
@@ -254,7 +254,7 @@ def test_delete_customer_unknown_id(client, mock_session):
 
 
 def test_delete_customer_invalid_id(client, mock_session):
-    response = client.delete("/customers/abc")
+    response = client.delete("/api/v1/customers/abc")
     assert response.status_code == 422
     mock_session.get.assert_not_called()
     mock_session.delete.assert_not_called()
@@ -262,7 +262,7 @@ def test_delete_customer_invalid_id(client, mock_session):
 
 
 def test_delete_customer_documented_in_openapi():
-    operation = app.openapi()["paths"]["/customers/{customer_id}"]["delete"]
+    operation = app.openapi()["paths"]["/api/v1/customers/{customer_id}"]["delete"]
     assert {"204", "404", "422", "503"} <= operation["responses"].keys()
     assert "content" not in operation["responses"]["204"]
     assert "requestBody" not in operation

@@ -10,8 +10,8 @@ from atelier_api.instruments.schemas import InstrumentType
 @pytest.mark.parametrize(
     "method, path",
     [
-        ("POST", "/instruments"),
-        ("PATCH", "/instruments/1"),
+        ("POST", "/api/v1/instruments"),
+        ("PATCH", "/api/v1/instruments/1"),
     ],
 )
 @pytest.mark.parametrize("body", [b"[]", b"null", b'"not an object"'])
@@ -29,7 +29,7 @@ def test_instrument_writes_require_json_object(
 
 def test_instrument_update_rejects_malformed_json(client, mock_session):
     response = client.patch(
-        "/instruments/1",
+        "/api/v1/instruments/1",
         content=b"{invalid",
         headers={"Content-Type": "application/json"},
     )
@@ -54,7 +54,7 @@ def test_failed_instrument_commit_returns_503_instead_of_success(
     session.commit.side_effect = OperationalError(
         "private_statement", {}, Exception("private_password")
     )
-    path = "/instruments" if method == "POST" else "/instruments/1"
+    path = "/api/v1/instruments" if method == "POST" else "/api/v1/instruments/1"
     # Keep the real session dependency to exercise its error translation.
     with patch("atelier_api.database.Session") as session_class:
         session_class.return_value.__enter__.return_value = session
