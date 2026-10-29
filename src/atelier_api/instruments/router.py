@@ -1,6 +1,6 @@
-"""Register, retrieve and update instruments and their customer association."""
+"""Register, retrieve, update and delete instruments."""
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Response, status
 from sqlmodel import select
 
 from atelier_api.customers.models import Customer
@@ -52,6 +52,43 @@ def get_instrument_by_id(instrument_id: int, session: SessionDep) -> InstrumentR
             detail="Instrument not found",
         )
     return InstrumentRead.model_validate(instrument)
+
+
+@instruments_router.delete(
+    "/{instrument_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    summary="Delete an instrument",
+    responses={
+        404: {"description": "Instrument not found"},
+        503: {"description": "Database unavailable"},
+    },
+)
+def delete_instrument(instrument_id: int, session: SessionDep) -> Response:
+    """Permanently delete an instrument while preserving its customer.
+
+    Deletion is committed before returning an empty response. Repeating the
+    request for the deleted identifier returns 404.
+
+    Args:
+        instrument_id: The identifier of the instrument to delete.
+        session: The database session provided for this request.
+
+    Returns:
+        HTTP 204 without a response body after successful deletion.
+
+    Raises:
+        HTTPException: With status 404 if the instrument does not exist.
+    """
+    instrument = session.get(Instrument, instrument_id)
+    if instrument is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Instrument not found",
+        )
+    session.delete(instrument)
+    session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @instruments_router.post(

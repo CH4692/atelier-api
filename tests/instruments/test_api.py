@@ -395,3 +395,39 @@ def test_update_instrument_is_documented_in_openapi():
     assert operation["responses"]["200"]["content"]["application/json"]["schema"][
         "$ref"
     ].endswith("/InstrumentRead")
+
+
+def test_delete_instrument_returns_empty_204(
+    client, mock_session, update_instrument_target
+):
+    response = client.delete("/instruments/42")
+    assert response.status_code == 204
+    assert response.content == b""
+    mock_session.get.assert_called_once_with(Instrument, 42)
+    mock_session.delete.assert_called_once_with(update_instrument_target)
+    mock_session.commit.assert_called_once()
+
+
+@pytest.mark.parametrize("instrument_id", [0, -1, 999999])
+def test_delete_unknown_instrument_returns_404(client, mock_session, instrument_id):
+    mock_session.get.return_value = None
+    response = client.delete(f"/instruments/{instrument_id}")
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Instrument not found"}
+    mock_session.delete.assert_not_called()
+    mock_session.commit.assert_not_called()
+
+
+def test_delete_instrument_rejects_invalid_id(client, mock_session):
+    response = client.delete("/instruments/invalid")
+    assert response.status_code == 422
+    mock_session.get.assert_not_called()
+    mock_session.delete.assert_not_called()
+    mock_session.commit.assert_not_called()
+
+
+def test_delete_instrument_is_documented_in_openapi():
+    operation = app.openapi()["paths"]["/instruments/{instrument_id}"]["delete"]
+    assert {"204", "404", "422", "503"} <= operation["responses"].keys()
+    assert "content" not in operation["responses"]["204"]
+    assert "requestBody" not in operation

@@ -284,3 +284,64 @@ def test_update_unknown_instrument_returns_404_from_postgresql(postgres_client):
     assert response.status_code == 404
     assert response.json() == {"detail": "Instrument not found"}
     assert postgres_client.get("/instruments").json() == []
+
+
+@pytest.mark.parametrize("with_customer", [True, False])
+def test_delete_instrument_removes_record_and_preserves_other_data(
+    postgres_client, db_connection, with_customer
+):
+    customer_id = None
+    if with_customer:
+        response = postgres_client.post(
+            "/customers",
+            json={
+                "first_name": "Maria",
+                "last_name": "Doe",
+                "email": "maria@example.com",
+            },
+        )
+        assert response.status_code == 201
+        customer_id = response.json()["id"]
+    instruments = []
+    for instrument_type in ("violin", "cello"):
+        response = postgres_client.post(
+            "/instruments",
+            json={
+                "type": instrument_type,
+                "customer_id": customer_id,
+            },
+        )
+        assert response.status_code == 201
+        instruments.append(response.json())
+    deleted, retained = instruments
+    path = f"/instruments/{deleted['id']}"
+    response = postgres_client.delete(path)
+    assert response.status_code == 204
+    assert response.content == b""
+    with Session(
+        bind=db_connection, join_transaction_mode="create_savepoint"
+    ) as session:
+        assert session.get(Instrument, deleted["id"]) is None
+        assert session.get(Instrument, retained["id"]) is not None
+    response = postgres_client.get(path)
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Instrument not found"}
+    response = postgres_client.get("/instruments")
+    assert response.status_code == 200
+    assert response.json() == [retained]
+    assert postgres_client.get(f"/instruments/{retained['id']}").json() == retained
+    response = postgres_client.delete(path)
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Instrument not found"}
+    assert postgres_client.get("/instruments").json() == [retained]
+    if with_customer:
+        response = postgres_client.get(f"/customers/{customer_id}")
+        assert response.status_code == 200
+        assert response.json()["id"] == customer_id
+
+
+def test_delete_unknown_instrument_does_not_change_database(postgres_client):
+    response = postgres_client.delete("/instruments/999999")
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Instrument not found"}
+    assert postgres_client.get("/instruments").json() == []
