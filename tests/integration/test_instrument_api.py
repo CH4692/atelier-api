@@ -168,3 +168,119 @@ def test_get_unknown_instrument_returns_404_from_postgresql(postgres_client):
     response = postgres_client.get("/instruments/999999")
     assert response.status_code == 404
     assert response.json() == {"detail": "Instrument not found"}
+
+
+def test_update_instrument_persists_details_and_customer_changes(
+    postgres_client, db_connection
+):
+    customer_ids = []
+    for name in ("Jon", "Maria"):
+        response = postgres_client.post(
+            "/customers",
+            json={
+                "first_name": name,
+                "last_name": "Doe",
+                "email": f"{name.lower()}@example.com",
+            },
+        )
+        assert response.status_code == 201
+        customer_ids.append(response.json()["id"])
+    response = postgres_client.post(
+        "/instruments",
+        json={
+            "type": "violin",
+            "maker": "Original maker",
+            "year_of_manufacture": 1920,
+            "identification_number": "LABEL-42",
+            "notes": "Original notes.",
+            "customer_id": customer_ids[0],
+        },
+    )
+    assert response.status_code == 201
+    created = response.json()
+    path = f"/instruments/{created['id']}"
+    changes = {
+        "type": "viola",
+        "maker": "Updated maker",
+        "year_of_manufacture": 1930,
+        "identification_number": "LABEL-43",
+        "notes": "Updated notes.",
+        "customer_id": customer_ids[1],
+    }
+    response = postgres_client.patch(path, json=changes)
+    assert response.status_code == 200
+    expected = {**created, **changes}
+    assert response.json() == expected
+    with Session(
+        bind=db_connection, join_transaction_mode="create_savepoint"
+    ) as session:
+        stored = session.get(Instrument, created["id"])
+        assert stored is not None
+        assert stored.model_dump(mode="json") == expected
+        assert stored.customer is not None
+        assert stored.customer.id == customer_ids[1]
+    assert postgres_client.get(path).json() == expected
+
+    response = postgres_client.patch(path, json={"notes": "Only notes changed."})
+    assert response.status_code == 200
+    expected["notes"] = "Only notes changed."
+    assert response.json() == expected
+    cleared = {
+        field: None
+        for field in (
+            "maker",
+            "year_of_manufacture",
+            "identification_number",
+            "notes",
+            "customer_id",
+        )
+    }
+    response = postgres_client.patch(path, json=cleared)
+    assert response.status_code == 200
+    expected.update(cleared)
+    assert response.json() == expected
+    assert postgres_client.get(path).json() == expected
+    with Session(
+        bind=db_connection, join_transaction_mode="create_savepoint"
+    ) as session:
+        stored = session.get(Instrument, created["id"])
+        assert stored is not None
+        assert stored.customer is None
+        assert stored.customer_id is None
+        assert stored.type is InstrumentType.VIOLA
+    response = postgres_client.patch(path, json={"customer_id": customer_ids[0]})
+    assert response.status_code == 200
+    expected["customer_id"] = customer_ids[0]
+    assert response.json() == expected
+    assert postgres_client.get(path).json() == expected
+
+
+@pytest.mark.parametrize(
+    "changes, status_code",
+    [
+        ({"customer_id": 999999, "notes": "Should not change."}, 404),
+        ({"type": None, "notes": "Should not change."}, 422),
+        ({"year_of_manufacture": 0}, 422),
+    ],
+)
+def test_failed_instrument_update_preserves_stored_data(
+    postgres_client, changes, status_code
+):
+    response = postgres_client.post(
+        "/instruments", json={"type": "cello", "notes": "Original notes."}
+    )
+    assert response.status_code == 201
+    created = response.json()
+    path = f"/instruments/{created['id']}"
+    response = postgres_client.patch(path, json=changes)
+    assert response.status_code == status_code
+    assert postgres_client.get(path).json() == created
+
+
+def test_update_unknown_instrument_returns_404_from_postgresql(postgres_client):
+    response = postgres_client.patch(
+        "/instruments/999999", json={"notes": "Changed notes."}
+    )
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Instrument not found"}
+    assert postgres_client.get("/instruments").json() == []

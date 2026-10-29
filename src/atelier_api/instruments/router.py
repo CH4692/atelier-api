@@ -1,4 +1,4 @@
-"""Register and retrieve instruments with their optional customer association."""
+"""Register, retrieve and update instruments and their customer association."""
 
 from fastapi import APIRouter, HTTPException, status
 from sqlmodel import select
@@ -7,7 +7,7 @@ from atelier_api.customers.models import Customer
 from atelier_api.database import SessionDep
 
 from .models import Instrument
-from .schemas import InstrumentCreate, InstrumentRead
+from .schemas import InstrumentCreate, InstrumentRead, InstrumentUpdate
 
 instruments_router = APIRouter(prefix="/instruments", tags=["instruments"])
 
@@ -95,3 +95,54 @@ def create_instrument(
     session.commit()
     session.refresh(db_instrument)
     return InstrumentRead.model_validate(db_instrument)
+
+
+@instruments_router.patch(
+    "/{instrument_id}",
+    summary="Update instrument information",
+    response_model=InstrumentRead,
+    responses={
+        404: {"description": "Instrument or referenced customer not found"},
+        503: {"description": "Database unavailable"},
+    },
+)
+def update_instrument(
+    instrument_id: int, instrument_update: InstrumentUpdate, session: SessionDep
+) -> InstrumentRead:
+    """Update supplied instrument fields and return the complete stored record.
+
+    Omitted fields remain unchanged. Set customer_id to null to remove the
+    association, or supply an existing customer's ID to change it. Optional
+    details can be cleared with null; type cannot. An empty object is a no-op.
+
+    Args:
+        instrument_id: The identifier of the instrument to update.
+        instrument_update: Validated changes supplied in the JSON request body.
+        session: The database session provided for this request.
+
+    Returns:
+        The complete instrument after committing any supplied changes.
+
+    Raises:
+        HTTPException: With status 404 if the instrument or customer is missing.
+    """
+    instrument = session.get(Instrument, instrument_id)
+    if instrument is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Instrument not found",
+        )
+    changes = instrument_update.model_dump(exclude_unset=True)
+    if "customer_id" in changes and instrument_update.customer_id is not None:
+        customer = session.get(Customer, instrument_update.customer_id)
+        if customer is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Customer not found",
+            )
+    if changes:
+        instrument.sqlmodel_update(changes)
+        session.add(instrument)
+        session.commit()
+        session.refresh(instrument)
+    return InstrumentRead.model_validate(instrument)
