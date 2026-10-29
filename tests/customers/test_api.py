@@ -111,6 +111,44 @@ def test_get_customers_empty(client, mock_session):
     assert response.json() == []
 
 
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"offset": -1},
+        {"limit": 0},
+        {"limit": 201},
+        {"limit": "invalid"},
+        {"q": "a" * 201},
+    ],
+)
+def test_customer_search_rejects_invalid_parameters(client, mock_session, params):
+    assert client.get("/api/v1/customers", params=params).status_code == 422
+    mock_session.exec.assert_not_called()
+
+
+def test_customer_search_uses_bound_literal_query_and_pagination(client, mock_session):
+    from sqlalchemy.dialects import postgresql
+
+    mock_session.exec.return_value.all.return_value = []
+    response = client.get(
+        "/api/v1/customers", params={"q": "  50%_off  ", "offset": 2, "limit": 3}
+    )
+    assert response.status_code == 200
+    assert response.json() == []
+    statement = mock_session.exec.call_args.args[0]
+    compiled = statement.compile(dialect=postgresql.dialect())
+    assert "ILIKE" in str(compiled)
+    assert "ORDER BY customer.id" in str(compiled)
+    assert "50%_off" not in str(compiled)
+    assert list(compiled.params.values()).count("50/%/_off") == 5
+    literal_sql = str(
+        statement.compile(
+            dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+        )
+    )
+    assert "LIMIT 3 OFFSET 2" in literal_sql
+
+
 def test_create_customer_missing_required_fields(client, mock_session):
     response = client.post("/api/v1/customers", json={})
     assert response.status_code == 422
