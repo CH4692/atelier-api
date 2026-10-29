@@ -3,6 +3,8 @@
 from fastapi import APIRouter, HTTPException, Response, status
 from sqlmodel import select
 
+from atelier_api.audit.models import AuditAction, AuditResource
+from atelier_api.audit.service import record_event
 from atelier_api.customers.models import Customer
 from atelier_api.database import SessionDep
 
@@ -87,6 +89,13 @@ def delete_instrument(instrument_id: int, session: SessionDep) -> Response:
             detail="Instrument not found",
         )
     session.delete(instrument)
+    record_event(
+        session,
+        AuditAction.INSTRUMENT_DELETED,
+        AuditResource.INSTRUMENT,
+        instrument.id,
+        actor_id=session.info.get("audit_actor_id"),
+    )
     session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -129,6 +138,14 @@ def create_instrument(
             )
     db_instrument = Instrument.model_validate(instrument)
     session.add(db_instrument)
+    session.flush()
+    record_event(
+        session,
+        AuditAction.INSTRUMENT_CREATED,
+        AuditResource.INSTRUMENT,
+        db_instrument.id,
+        actor_id=session.info.get("audit_actor_id"),
+    )
     session.commit()
     session.refresh(db_instrument)
     return InstrumentRead.model_validate(db_instrument)
@@ -180,6 +197,13 @@ def update_instrument(
     if changes:
         instrument.sqlmodel_update(changes)
         session.add(instrument)
+        record_event(
+            session,
+            AuditAction.INSTRUMENT_UPDATED,
+            AuditResource.INSTRUMENT,
+            instrument.id,
+            actor_id=session.info.get("audit_actor_id"),
+        )
         session.commit()
         session.refresh(instrument)
     return InstrumentRead.model_validate(instrument)

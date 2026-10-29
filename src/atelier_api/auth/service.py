@@ -7,12 +7,16 @@ from hashlib import sha256
 from math import ceil
 from re import fullmatch
 from secrets import token_urlsafe
+from typing import NoReturn
 
 from fastapi import HTTPException
 from sqlalchemy import case, delete, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlmodel import Session, col, select
 
+from atelier_api.audit.models import AuditAction, AuditResource
+from atelier_api.audit.schemas import AuditDetails
+from atelier_api.audit.service import record_event
 from atelier_api.settings import Settings
 from atelier_api.users.authentication import authenticate_user
 from atelier_api.users.models import User
@@ -66,6 +70,10 @@ def _consume_limit(key: str, limit: int, config: Settings, session: Session) -> 
     row = session.execute(throttled).one()
     session.commit()
     if row.attempts > limit:
+        record_event(
+            session, AuditAction.LOGIN_THROTTLED, AuditResource.SESSION, succeeded=False
+        )
+        session.commit()
         logger.warning("auth_login_throttled")
         retry = max(
             1,
@@ -82,18 +90,44 @@ def _consume_limit(key: str, limit: int, config: Settings, session: Session) -> 
         )
 
 
-def revoke_session(token: str | None, session: Session) -> None:
-    """Revoke a known cookie verifier without revealing whether it existed."""
+def revoke_session(
+    token: str | None, session: Session, *, commit: bool = True, logout: bool = False
+) -> None:
+    """Revoke sessions and record safe user references without storing verifiers.
+
+    Login rotation defers commit so replacement and revocation are atomic.
+    Logout is recorded even if the supplied cookie is absent or already revoked.
+    """
+    user_ids: list[int] = []
     if token and valid_token_shape(token):
-        session.execute(
-            update(UserSession)
-            .where(
-                col(UserSession.token_hash) == token_digest(token),
-                col(UserSession.revoked_at).is_(None),
-            )
-            .values(revoked_at=utc_now())
+        user_ids = list(
+            session.execute(
+                update(UserSession)
+                .where(
+                    col(UserSession.token_hash) == token_digest(token),
+                    col(UserSession.revoked_at).is_(None),
+                )
+                .values(revoked_at=utc_now())
+                .returning(col(UserSession.user_id))
+            ).scalars()
         )
-    session.commit()
+    for user_id in user_ids:
+        record_event(
+            session,
+            AuditAction.SESSION_REVOKED,
+            AuditResource.USER,
+            user_id,
+            actor_id=session.info.get("audit_actor_id", user_id),
+        )
+    if logout:
+        record_event(
+            session,
+            AuditAction.LOGOUT,
+            AuditResource.SESSION,
+            actor_id=user_ids[0] if user_ids else None,
+        )
+    if commit:
+        session.commit()
 
 
 def login(
@@ -117,12 +151,15 @@ def login(
         email, password, session, allow_customer=config.customer_portal_auth_enabled
     )
     if identity is None:
+        record_event(session, AuditAction.LOGIN, AuditResource.SESSION, succeeded=False)
+        session.commit()
         logger.warning("auth_login_failed")
         raise HTTPException(401, "Invalid credentials")
     user = session.get(User, identity.user_id, populate_existing=True)
     assert user is not None
     if old_token:
-        revoke_session(old_token, session)
+        session.info["audit_actor_id"] = identity.user_id
+        revoke_session(old_token, session, commit=False)
     token = token_urlsafe(32)
     now = utc_now()
     expires = now + timedelta(seconds=config.session_absolute_seconds)
@@ -136,6 +173,13 @@ def login(
             expires_at=expires,
         )
     )
+    record_event(
+        session,
+        AuditAction.LOGIN,
+        AuditResource.USER,
+        identity.user_id,
+        actor_id=identity.user_id,
+    )
     session.commit()
     logger.info("auth_login_succeeded")
     return IssuedSession(user, token, expires)
@@ -145,9 +189,20 @@ def resolve_session(
     token: str | None, config: Settings, session: Session
 ) -> tuple[UserSession, User]:
     """Reject missing, expired, revoked or stale sessions using live account state."""
-    denied = HTTPException(401, "Authentication required")
+
+    def reject() -> NoReturn:
+        if token:
+            record_event(
+                session,
+                AuditAction.SESSION_REJECTED,
+                AuditResource.SESSION,
+                succeeded=False,
+            )
+            session.commit()
+        raise HTTPException(401, "Authentication required")
+
     if not token or not valid_token_shape(token):
-        raise denied
+        reject()
     record = session.exec(
         select(UserSession)
         .where(UserSession.token_hash == token_digest(token))
@@ -161,7 +216,7 @@ def resolve_session(
         or record.last_activity_at + timedelta(seconds=config.session_idle_seconds)
         <= now
     ):
-        raise denied
+        reject()
     user = session.get(User, record.user_id, populate_existing=True)
     if (
         user is None
@@ -172,7 +227,7 @@ def resolve_session(
             and (not config.customer_portal_auth_enabled or user.customer_id is None)
         )
     ):
-        raise denied
+        reject()
     return record, user
 
 
@@ -196,6 +251,12 @@ def cleanup_expired_sessions(session: Session, config: Settings) -> int:
             col(LoginRateLimit.window_started_at)
             <= now - timedelta(seconds=config.login_window_seconds)
         )
+    )
+    record_event(
+        session,
+        AuditAction.SESSION_CLEANUP,
+        AuditResource.SESSION,
+        details=AuditDetails(removed_count=len(ids)),
     )
     session.commit()
     return len(ids)

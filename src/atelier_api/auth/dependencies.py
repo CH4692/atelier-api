@@ -5,6 +5,8 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Request, Security
 from fastapi.security import APIKeyCookie
 
+from atelier_api.audit.models import AuditAction, AuditResource
+from atelier_api.audit.service import record_event
 from atelier_api.database import SessionDep
 from atelier_api.settings import Settings, settings
 from atelier_api.users.models import User
@@ -60,6 +62,7 @@ def get_current_user(
         request.cookies.get(config.session_cookie_name), config, session
     )
     validate_csrf(request, config)
+    session.info["audit_actor_id"] = user.id
     record.last_activity_at = utc_now()
     session.add(record)
     session.commit()
@@ -69,8 +72,17 @@ def get_current_user(
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
-def require_internal_user(user: CurrentUser) -> User:
+def require_internal_user(user: CurrentUser, session: SessionDep) -> User:
     """Authorize workshop data separately from successful authentication."""
     if user.role not in {UserRole.ADMIN, UserRole.EMPLOYEE}:
+        record_event(
+            session,
+            AuditAction.WORKSHOP_DENIED,
+            AuditResource.USER,
+            user.id,
+            actor_id=user.id,
+            succeeded=False,
+        )
+        session.commit()
         raise HTTPException(403, "Access forbidden")
     return user

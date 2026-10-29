@@ -3,7 +3,12 @@
 from fastapi import APIRouter, HTTPException, Response, status
 from sqlmodel import select
 
+from atelier_api.audit.models import AuditAction, AuditResource
+from atelier_api.audit.schemas import AuditDetails
+from atelier_api.audit.service import record_event
 from atelier_api.database import SessionDep
+from atelier_api.instruments.models import Instrument
+from atelier_api.users.service import audit_customer_removal
 
 from .models import Customer
 from .schemas import CustomerCreate, CustomerRead, CustomerUpdate
@@ -41,6 +46,14 @@ async def create_customer(
     """
     db_customer = Customer.model_validate(customer)
     session.add(db_customer)
+    session.flush()
+    record_event(
+        session,
+        AuditAction.CUSTOMER_CREATED,
+        AuditResource.CUSTOMER,
+        db_customer.id,
+        actor_id=session.info.get("audit_actor_id"),
+    )
     session.commit()
     session.refresh(db_customer)
     return CustomerRead.model_validate(db_customer)
@@ -104,7 +117,32 @@ def delete_customer(customer_id: int, session: SessionDep) -> Response:
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Customer not found",
         )
+    session.refresh(customer, with_for_update=True)
+    audit_customer_removal(customer_id, session)
+    instruments = session.exec(
+        select(Instrument)
+        .where(Instrument.customer_id == customer_id)
+        .with_for_update()
+    ).all()
+    for instrument in instruments:
+        record_event(
+            session,
+            AuditAction.INSTRUMENT_UPDATED,
+            AuditResource.INSTRUMENT,
+            instrument.id,
+            actor_id=session.info.get("audit_actor_id"),
+            details=AuditDetails(
+                previous_customer_id=customer_id, new_customer_id=None
+            ),
+        )
     session.delete(customer)
+    record_event(
+        session,
+        AuditAction.CUSTOMER_DELETED,
+        AuditResource.CUSTOMER,
+        customer.id,
+        actor_id=session.info.get("audit_actor_id"),
+    )
     session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -148,6 +186,13 @@ def update_customer(
     if changes:
         customer.sqlmodel_update(changes)
         session.add(customer)
+        record_event(
+            session,
+            AuditAction.CUSTOMER_UPDATED,
+            AuditResource.CUSTOMER,
+            customer.id,
+            actor_id=session.info.get("audit_actor_id"),
+        )
         session.commit()
         session.refresh(customer)
     return CustomerRead.model_validate(customer)
