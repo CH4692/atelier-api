@@ -67,6 +67,15 @@ curl --fail-with-body -X PATCH -b /private/tmp/atelier-cookies.txt -H 'Origin: h
 
 Nicht angegebene Felder bleiben unverändert. `phone: null` entfernt die Telefonnummer. Vorname, Nachname und E-Mail dürfen nicht `null` sein; Namen werden getrimmt und dürfen nicht leer sein. E-Mail-Adressen werden validiert. Unbekannte Felder (einschließlich `id`) werden mit HTTP 422 abgewiesen. Ein leerer JSON-Body `{}` liefert den vorhandenen Kunden unverändert zurück. Eine unbekannte Kunden-ID ergibt HTTP 404. Request- und Antwortschema sind unter `/docs` dokumentiert.
 
+### Audit-Protokoll
+
+`GET /api/v1/audit-events` bietet ausschließlich Administratoren einen gefilterten,
+paginierten Lesezugriff. Fachliche Änderungen und Audit-Einträge werden gemeinsam
+committet. Die Ereignisse enthalten keine Passwörter, Session-Geheimnisse oder
+vollständigen Request-Bodies. Aufbewahrung (Standard: 180 Tage), Bereinigung,
+implementierte Ereignisse und Integritätsgrenzen sind in [docs/audit.md](docs/audit.md)
+beschrieben. Der Betreiber plant `uv run atelier-audit-cleanup` täglich ein.
+
 ### Kunden löschen
 
 `DELETE /api/v1/customers/{customer_id}` löscht den Kunden dauerhaft aus der Datenbank. Nach erfolgreichem Commit liefert die API HTTP 204 ohne Antwortinhalt. Der Kunde erscheint nicht mehr in der Kundenliste; ein anschließender Abruf oder erneutes Löschen liefert HTTP 404 mit `Customer not found`. Ungültige ID-Formate liefern HTTP 422. Andere Kunden bleiben unverändert.

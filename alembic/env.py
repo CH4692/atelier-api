@@ -8,6 +8,7 @@ from sqlalchemy.exc import InterfaceError, OperationalError, TimeoutError
 from sqlmodel import SQLModel
 
 from alembic import context
+from atelier_api.audit.models import AuditEvent  # noqa: F401
 from atelier_api.auth.models import LoginRateLimit, UserSession  # noqa: F401
 
 # Register table models in SQLModel.metadata before Alembic inspects it.

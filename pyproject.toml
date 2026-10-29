@@ -24,6 +24,7 @@ entrypoint = "atelier_api.main:app"
 [project.scripts]
 atelier-api = "atelier_api.cli:main"
 atelier-users = "atelier_api.users.cli:main"
+atelier-audit-cleanup = "atelier_api.audit.cli:main"
 atelier-sessions-cleanup = "atelier_api.auth.cli:main"
 
 [project.optional-dependencies]

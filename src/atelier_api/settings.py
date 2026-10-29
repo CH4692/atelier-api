@@ -28,6 +28,7 @@ class Settings(BaseSettings):
         "http://localhost:8000",
         "http://127.0.0.1:8000",
     ]
+    audit_retention_days: int = Field(default=180, ge=1)
     session_idle_seconds: int = Field(default=1800, gt=0)
     session_absolute_seconds: int = Field(default=28800, gt=0)
     login_account_limit: int = Field(default=10, gt=0)

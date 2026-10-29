@@ -330,6 +330,7 @@ def test_concurrent_deactivation_keeps_one_active_administrator(postgres_engine)
     finally:
         # This fixture owns a disposable schema; reset committed concurrency data.
         with postgres_engine.begin() as connection:
+            connection.execute(text("TRUNCATE audit_event RESTART IDENTITY"))
             connection.execute(text("TRUNCATE app_user RESTART IDENTITY CASCADE"))
             connection.execute(
                 text(

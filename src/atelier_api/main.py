@@ -11,9 +11,11 @@ from fastapi.routing import APIRoute
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
 
+from atelier_api.audit.router import router as audit_router
 from atelier_api.auth.dependencies import get_current_user, require_internal_user
 from atelier_api.auth.router import router as auth_router
 from atelier_api.customers.router import customers_router
+from atelier_api.docs import swagger_ui
 from atelier_api.health.router import health_router
 from atelier_api.instruments.customer_router import customer_instruments_router
 from atelier_api.instruments.router import instruments_router
@@ -24,14 +26,14 @@ API_V1_PREFIX = "/api/v1"
 
 
 class AuthenticationCacheHeaders(BaseHTTPMiddleware):
-    """Prevent caching of authentication data and security failures."""
+    """Prevent caching of account/audit data and security failures."""
 
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
         response = await call_next(request)
         if request.url.path.startswith(
-            f"{API_V1_PREFIX}/auth/"
+            (f"{API_V1_PREFIX}/auth/", f"{API_V1_PREFIX}/audit-events")
         ) or response.status_code in {
             401,
             403,
@@ -102,10 +104,13 @@ def create_app(config: Settings | None = None) -> FastAPI:
             "contract versions are independent from this software release version."
         ),
         version=software_version(),
-        docs_url=documentation_url,
+        docs_url=None,
         redoc_url="/redoc" if config.api_documentation_enabled else None,
         openapi_url="/openapi.json" if config.api_documentation_enabled else None,
     )
+    if documentation_url is not None:
+        application.docs_url = documentation_url
+        application.add_route(documentation_url, swagger_ui, include_in_schema=False)
     application.state.settings = config
     application.add_middleware(AuthenticationCacheHeaders)
     application.add_middleware(
@@ -119,6 +124,7 @@ def create_app(config: Settings | None = None) -> FastAPI:
     application.include_router(health_router)
     api_v1_router = APIRouter(prefix=API_V1_PREFIX)
     api_v1_router.include_router(auth_router)
+    api_v1_router.include_router(audit_router)
     protected = [Depends(require_internal_user)]
     for router in (customers_router, instruments_router, customer_instruments_router):
         api_v1_router.include_router(router, dependencies=protected)

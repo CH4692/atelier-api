@@ -67,7 +67,9 @@ def logout_endpoint(
     request: Request, config: SecuritySettings, session: SessionDep
 ) -> Response:
     """Revoke the cookie's session and clear it even when already absent or revoked."""
-    revoke_session(request.cookies.get(config.session_cookie_name), session)
+    revoke_session(
+        request.cookies.get(config.session_cookie_name), session, logout=True
+    )
     response = Response(status_code=204)
     response.delete_cookie(
         config.session_cookie_name,

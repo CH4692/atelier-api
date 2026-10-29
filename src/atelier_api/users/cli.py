@@ -8,6 +8,8 @@ from pydantic import SecretStr, ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session
 
+from atelier_api.audit.models import AuditAction, AuditResource
+from atelier_api.audit.service import record_event
 from atelier_api.database import engine
 
 from .authentication import authenticate_user, require_active_user
@@ -67,10 +69,29 @@ def main() -> None:
                 actor = authenticate_user(
                     args.admin_email, getpass("Administrator password: "), session
                 )
+                record_event(
+                    session,
+                    AuditAction.LOGIN,
+                    AuditResource.USER if actor else AuditResource.SESSION,
+                    actor.user_id if actor else None,
+                    actor_id=actor.user_id if actor else None,
+                    succeeded=actor is not None,
+                )
+                session.commit()
                 if (
                     actor is None
                     or require_active_user(actor, session).role != UserRole.ADMIN
                 ):
+                    if actor is not None:
+                        record_event(
+                            session,
+                            AuditAction.ADMIN_DENIED,
+                            AuditResource.USER,
+                            actor.user_id,
+                            actor_id=actor.user_id,
+                            succeeded=False,
+                        )
+                        session.commit()
                     raise PermissionError("Administrator authentication failed")
                 if args.command == "create":
                     result = create_user(

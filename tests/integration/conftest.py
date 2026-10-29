@@ -13,8 +13,14 @@ from sqlalchemy.engine import make_url
 from sqlmodel import Session, create_engine
 
 from atelier_api.auth.dependencies import require_internal_user
+from atelier_api.customers.models import Customer
 from atelier_api.database import get_session
-from atelier_api.main import app
+from atelier_api.main import app, create_app
+from atelier_api.settings import Settings
+from atelier_api.users.models import User
+from atelier_api.users.passwords import hash_password
+from atelier_api.users.roles import UserRole
+from tests.integration.auth_helpers import HEADERS, ORIGIN, PASSWORD
 
 
 @pytest.fixture(scope="session")
@@ -75,6 +81,7 @@ def db_connection(postgres_engine):
             transaction.rollback()
     # Verify cleanup even when an API handler explicitly committed its session.
     with postgres_engine.connect() as connection:
+        assert connection.scalar(text("SELECT count(*) FROM audit_event")) == 0
         assert connection.scalar(text("SELECT count(*) FROM customer")) == 0
         assert connection.scalar(text("SELECT count(*) FROM instrument")) == 0
         assert connection.scalar(text("SELECT count(*) FROM app_user")) == 0
@@ -108,3 +115,66 @@ def postgres_client(db_connection):
     finally:
         app.dependency_overrides.clear()
         app.dependency_overrides.update(original_overrides)
+
+
+@pytest.fixture(scope="module")
+def password_hash():
+    return hash_password(PASSWORD)
+
+
+@pytest.fixture
+def accounts(db_connection, password_hash):
+    with Session(
+        bind=db_connection, join_transaction_mode="create_savepoint"
+    ) as session:
+        customer = Customer(
+            first_name="Test", last_name="Owner", email="owner@example.com"
+        )
+        session.add(customer)
+        session.flush()
+        result = {}
+        for name, role, active in [
+            ("admin", UserRole.ADMIN, True),
+            ("employee", UserRole.EMPLOYEE, True),
+            ("inactive", UserRole.EMPLOYEE, False),
+            ("customer", UserRole.CUSTOMER, True),
+        ]:
+            user = User(
+                email=f"{name}@example.com",
+                hashed_password=password_hash,
+                role=role,
+                is_active=active,
+                customer_id=customer.id if role == UserRole.CUSTOMER else None,
+            )
+            session.add(user)
+            session.flush()
+            result[name] = user.id
+        session.commit()
+        return result
+
+
+@pytest.fixture
+def auth_factory(db_connection, accounts):
+    clients = []
+
+    def build(**changes):
+        options = {"environment": "production", "frontend_origins": [ORIGIN]}
+        options.update(changes)
+        config = Settings(_env_file=None, database_url="sqlite://", **options)
+        app = create_app(config)
+
+        def override():
+            with Session(
+                bind=db_connection, join_transaction_mode="create_savepoint"
+            ) as session:
+                yield session
+
+        app.dependency_overrides[get_session] = override
+        client = TestClient(app, base_url="https://api.example.test", headers=HEADERS)
+        client.__enter__()
+        clients.append(client)
+        return client
+
+    yield build
+    for client in reversed(clients):
+        client.__exit__(None, None, None)

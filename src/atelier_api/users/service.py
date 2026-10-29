@@ -3,6 +3,9 @@
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
+from atelier_api.audit.models import AuditAction, AuditResource
+from atelier_api.audit.schemas import AuditDetails
+from atelier_api.audit.service import record_event
 from atelier_api.customers.models import Customer
 
 from .authentication import UserIdentity, require_active_user
@@ -59,8 +62,34 @@ def _check_customer(customer_id: int | None, session: Session) -> None:
         raise LookupError("Customer not found")
 
 
-def _commit(user: User, session: Session) -> UserRead:
+def _commit(
+    user: User,
+    session: Session,
+    *,
+    action: AuditAction | None,
+    actor_id: int | None = None,
+    details: AuditDetails | None = None,
+    revoke: bool = False,
+) -> UserRead:
     try:
+        session.flush()
+        if action is not None:
+            record_event(
+                session,
+                action,
+                AuditResource.USER,
+                user.id,
+                actor_id=actor_id,
+                details=details,
+            )
+        if revoke:
+            record_event(
+                session,
+                AuditAction.USER_SESSIONS_REVOKED,
+                AuditResource.USER,
+                user.id,
+                actor_id=actor_id,
+            )
         session.commit()
     except IntegrityError:
         session.rollback()
@@ -107,7 +136,7 @@ def bootstrap_admin(user: UserCreate, session: Session) -> UserRead:
     state.bootstrap_completed = True
     session.add(state)
     session.add(account)
-    return _commit(account, session)
+    return _commit(account, session, action=AuditAction.USER_BOOTSTRAPPED)
 
 
 def create_user(
@@ -128,7 +157,15 @@ def create_user(
     _check_customer(customer_id, session)
     account = _new_user(user, role, customer_id)
     session.add(account)
-    return _commit(account, session)
+    return _commit(
+        account,
+        session,
+        action=AuditAction.USER_CREATED,
+        actor_id=actor.user_id,
+        details=AuditDetails(
+            new_role=account.role, new_customer_id=account.customer_id
+        ),
+    )
 
 
 def set_user_active(
@@ -143,9 +180,18 @@ def set_user_active(
     user = _target(user_id, session)
     if not is_active:
         _protect_last_administrator(user, session)
+    changed = user.is_active != is_active
     user.is_active = is_active
     session.add(user)
-    return _commit(user, session)
+    action = AuditAction.USER_ACTIVATED if is_active else AuditAction.USER_DEACTIVATED
+    return _commit(
+        user,
+        session,
+        action=action if changed else None,
+        actor_id=actor.user_id,
+        details=AuditDetails(new_role=user.role),
+        revoke=changed and not is_active,
+    )
 
 
 def set_user_role(
@@ -162,9 +208,17 @@ def set_user_role(
     role = UserRole(role)
     if role != UserRole.ADMIN:
         _protect_last_administrator(user, session)
+    previous_role = user.role
     user.role = role
     session.add(user)
-    return _commit(user, session)
+    return _commit(
+        user,
+        session,
+        action=AuditAction.USER_ROLE_CHANGED if previous_role != role else None,
+        actor_id=actor.user_id,
+        revoke=previous_role != role,
+        details=AuditDetails(previous_role=previous_role, new_role=role),
+    )
 
 
 def set_customer_association(
@@ -174,9 +228,21 @@ def set_customer_association(
     _administrator(actor, session)
     _check_customer(customer_id, session)
     user = _target(user_id, session)
+    previous_customer_id = user.customer_id
     user.customer_id = customer_id
     session.add(user)
-    return _commit(user, session)
+    return _commit(
+        user,
+        session,
+        action=AuditAction.USER_CUSTOMER_CHANGED
+        if previous_customer_id != customer_id
+        else None,
+        actor_id=actor.user_id,
+        revoke=previous_customer_id != customer_id,
+        details=AuditDetails(
+            previous_customer_id=previous_customer_id, new_customer_id=customer_id
+        ),
+    )
 
 
 def delete_user(user_id: int, session: Session, *, actor: UserIdentity) -> None:
@@ -184,5 +250,49 @@ def delete_user(user_id: int, session: Session, *, actor: UserIdentity) -> None:
     _administrator(actor, session)
     user = _target(user_id, session)
     _protect_last_administrator(user, session)
+    record_event(
+        session,
+        AuditAction.USER_DELETED,
+        AuditResource.USER,
+        user.id,
+        actor_id=actor.user_id,
+    )
+    record_event(
+        session,
+        AuditAction.USER_SESSIONS_REVOKED,
+        AuditResource.USER,
+        user.id,
+        actor_id=actor.user_id,
+    )
     session.delete(user)
     session.commit()
+
+
+def audit_customer_removal(customer_id: int, session: Session) -> None:
+    """Record the account effects of an authorized customer deletion.
+
+    PostgreSQL clears these associations and revokes sessions through its existing
+    foreign key/security trigger. Keep the audit facts in the deleting transaction.
+    This helper does not change accounts or authorize customer deletion itself.
+    """
+    users = session.exec(
+        select(User).where(User.customer_id == customer_id).with_for_update()
+    ).all()
+    for user in users:
+        record_event(
+            session,
+            AuditAction.USER_CUSTOMER_CHANGED,
+            AuditResource.USER,
+            user.id,
+            actor_id=session.info.get("audit_actor_id"),
+            details=AuditDetails(
+                previous_customer_id=customer_id, new_customer_id=None
+            ),
+        )
+        record_event(
+            session,
+            AuditAction.USER_SESSIONS_REVOKED,
+            AuditResource.USER,
+            user.id,
+            actor_id=session.info.get("audit_actor_id"),
+        )

@@ -5,97 +5,15 @@ from hashlib import sha256
 from secrets import token_urlsafe
 
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlmodel import Session, select
 
 from atelier_api.auth.models import LoginRateLimit, UserSession
 from atelier_api.auth.service import cleanup_expired_sessions, utc_now
-from atelier_api.customers.models import Customer
-from atelier_api.database import get_session
-from atelier_api.main import create_app
-from atelier_api.settings import Settings
 from atelier_api.users.models import User
 from atelier_api.users.passwords import hash_password
 from atelier_api.users.roles import UserRole
-
-ORIGIN = "https://app.example.test"
-PASSWORD = "Workshop-test-password!42"
-HEADERS = {"Origin": ORIGIN, "X-CSRF-Protection": "1"}
-
-
-@pytest.fixture(scope="module")
-def password_hash():
-    return hash_password(PASSWORD)
-
-
-@pytest.fixture
-def accounts(db_connection, password_hash):
-    with Session(
-        bind=db_connection, join_transaction_mode="create_savepoint"
-    ) as session:
-        customer = Customer(
-            first_name="Test", last_name="Owner", email="owner@example.com"
-        )
-        session.add(customer)
-        session.flush()
-        result = {}
-        for name, role, active in [
-            ("admin", UserRole.ADMIN, True),
-            ("employee", UserRole.EMPLOYEE, True),
-            ("inactive", UserRole.EMPLOYEE, False),
-            ("customer", UserRole.CUSTOMER, True),
-        ]:
-            user = User(
-                email=f"{name}@example.com",
-                hashed_password=password_hash,
-                role=role,
-                is_active=active,
-                customer_id=customer.id if role == UserRole.CUSTOMER else None,
-            )
-            session.add(user)
-            session.flush()
-            result[name] = user.id
-        session.commit()
-        return result
-
-
-@pytest.fixture
-def auth_factory(db_connection, accounts):
-    clients = []
-
-    def build(**changes):
-        config = Settings(
-            _env_file=None,
-            database_url="sqlite://",
-            environment="production",
-            frontend_origins=[ORIGIN],
-            **changes,
-        )
-        app = create_app(config)
-
-        def override():
-            with Session(
-                bind=db_connection, join_transaction_mode="create_savepoint"
-            ) as session:
-                yield session
-
-        app.dependency_overrides[get_session] = override
-        client = TestClient(app, base_url="https://api.example.test", headers=HEADERS)
-        client.__enter__()
-        clients.append(client)
-        return client
-
-    yield build
-    for client in reversed(clients):
-        client.__exit__(None, None, None)
-
-
-def sign_in(client, name="employee", password=PASSWORD):
-    return client.post(
-        "/api/v1/auth/login",
-        json={"email": f"{name}@example.com", "password": password},
-    )
+from tests.integration.auth_helpers import ORIGIN, PASSWORD, sign_in
 
 
 def session_record(db_connection):
@@ -444,3 +362,23 @@ def test_credentials_and_tokens_are_absent_from_logs_and_errors(auth_factory, ca
     assert response.status_code == 422
     assert PASSWORD not in response.text
     assert response.json() == {"detail": "Invalid request"}
+
+
+@pytest.mark.parametrize("origin", ["http://localhost:8000", "http://127.0.0.1:8000"])
+def test_development_login_retains_browser_session(auth_factory, origin):
+    client = auth_factory(environment="development", frontend_origins=[origin])
+    client.base_url = origin
+    client.headers.update({"Origin": origin})
+    response = sign_in(client, "admin")
+    assert response.status_code == 200
+    cookie = response.headers["set-cookie"]
+    assert "dev-session=" in cookie
+    assert "HttpOnly" in cookie
+    assert "SameSite=lax" in cookie
+    assert "Path=/" in cookie
+    assert "Secure" not in cookie
+    assert "domain=" not in cookie.lower()
+    assert client.get("/api/v1/auth/me").json() == response.json()
+    assert client.get("/api/v1/customers").status_code == 200
+    assert client.post("/api/v1/auth/logout").status_code == 204
+    assert client.get("/api/v1/auth/me").status_code == 401
