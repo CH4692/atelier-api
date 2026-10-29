@@ -76,4 +76,12 @@ def list_audit_events(
     events = session.exec(
         statement.order_by(col(AuditEvent.id).desc()).limit(limit)
     ).all()
-    return [AuditEventRead.model_validate(event) for event in events]
+    result = [AuditEventRead.model_validate(event) for event in events]
+    record_event(
+        session,
+        AuditAction.AUDIT_READ,
+        AuditResource.AUDIT,
+        actor_id=user.id,
+    )
+    session.commit()
+    return result

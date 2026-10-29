@@ -34,6 +34,7 @@ class AuditAction(StrEnum):
     SESSION_REJECTED = "auth.session_rejected"
     WORKSHOP_DENIED = "auth.workshop_access_denied"
     AUDIT_DENIED = "audit.access_denied"
+    AUDIT_READ = "audit.read"
     RETENTION = "audit.retention"
 
 
