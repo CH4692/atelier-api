@@ -47,6 +47,7 @@ def test_search_customers(postgres_client, searchable_customers, query, indices)
     response = postgres_client.get("/api/v1/customers", params={"q": query})
     assert response.status_code == 200
     assert response.json() == [searchable_customers[index] for index in indices]
+    assert int(response.headers["X-Total-Count"]) == len(indices)
 
 
 @pytest.mark.parametrize("query,indices", [(None, [0, 1, 2]), ("doe", [1, 2])])
@@ -60,8 +61,24 @@ def test_search_customers_pagination(
             params["q"] = query
         response = postgres_client.get("/api/v1/customers", params=params)
         assert response.status_code == 200
+        assert int(response.headers["X-Total-Count"]) == len(indices)
         pages.append(response.json())
     assert pages == [[searchable_customers[index]] for index in indices] + [[]]
+
+
+@pytest.mark.parametrize(
+    "offset,limit,indices",
+    [(0, 200, [0, 1, 2]), (0, 1, [0]), (2, 2, [2]), (3, 2, []), (1000, 1, [])],
+)
+def test_customer_pagination_boundaries(
+    postgres_client, searchable_customers, offset, limit, indices
+):
+    response = postgres_client.get(
+        "/api/v1/customers", params={"offset": offset, "limit": limit}
+    )
+    assert response.status_code == 200
+    assert response.json() == [searchable_customers[index] for index in indices]
+    assert response.headers["X-Total-Count"] == "3"
 
 
 @pytest.mark.parametrize("phone", [None, "+49176123456789"])
@@ -99,6 +116,7 @@ def test_customer_list_starts_empty(postgres_client):
     response = postgres_client.get("/api/v1/customers")
     assert response.status_code == 200
     assert response.json() == []
+    assert response.headers["X-Total-Count"] == "0"
 
 
 def test_committed_test_data_does_not_leak(postgres_client, db_connection):

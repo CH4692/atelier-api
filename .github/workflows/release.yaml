@@ -38,6 +38,7 @@ jobs:
 
       - name: Calculate version, update files, tag and create GitHub Release
         id: release
+        # build_command installs uv inside this Docker action, not on the runner.
         uses: python-semantic-release/python-semantic-release@v10.7.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

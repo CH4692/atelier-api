@@ -119,7 +119,7 @@ def create_app(config: Settings | None = None) -> FastAPI:
         allow_credentials=True,
         allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "X-CSRF-Protection"],
-        expose_headers=["Retry-After"],
+        expose_headers=["Retry-After", "X-Total-Count"],
     )
     application.include_router(health_router)
     api_v1_router = APIRouter(prefix=API_V1_PREFIX)

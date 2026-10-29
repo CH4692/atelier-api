@@ -1,5 +1,7 @@
 """Validate Conventional Commit and pre-1.0 semantic release policy."""
 
+import os
+import subprocess
 import tomllib
 from pathlib import Path
 
@@ -23,6 +25,43 @@ def test_release_configuration_has_one_canonical_version_source():
     assert config["tag_format"] == "v{version}"
     assert "uv lock --upgrade-package" in config["build_command"]
     assert "git add uv.lock" in config["build_command"]
+
+
+def test_release_build_installs_only_the_pinned_build_tool():
+    with (PROJECT_ROOT / "pyproject.toml").open("rb") as file:
+        project = tomllib.load(file)
+    (uv_requirement,) = project["project"]["optional-dependencies"]["build"]
+    command = project["tool"]["semantic_release"]["build_command"]
+    assert f"python -m pip install --only-binary=:all: '{uv_requirement}'" in command
+    assert "pip install -e" not in command
+    assert command.strip().endswith("uv build")
+
+
+def test_release_build_stops_if_tool_installation_fails(tmp_path):
+    python = tmp_path / "python"
+    python.write_text("#!/bin/sh\nexit 23\n")
+    python.chmod(0o755)
+    for tool in ("uv", "git"):
+        executable = tmp_path / tool
+        executable.write_text('#!/bin/sh\necho unexpected > "$RELEASE_TEST_MARKER"\n')
+        executable.chmod(0o755)
+    marker = tmp_path / "unexpected"
+    result = subprocess.run(
+        ["/bin/bash", "-c", release_configuration()["build_command"]],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "PATH": str(tmp_path),
+            "PACKAGE_NAME": "atelier-api",
+            "RELEASE_TEST_MARKER": str(marker),
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=10,
+    )
+    assert result.returncode == 23
+    assert not marker.exists()
 
 
 def test_conventional_commits_have_explicit_release_levels():

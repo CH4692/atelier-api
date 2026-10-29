@@ -63,7 +63,8 @@ commit_message = "chore(release): {version} [skip ci]"
 tag_format = "v{version}"
 version_toml = ["pyproject.toml:project.version:nf"]
 build_command = """
-python -m pip install -e '.[build]'
+set -eu
+python -m pip install --only-binary=:all: 'uv==0.13.1'
 uv lock --upgrade-package "$PACKAGE_NAME"
 git add uv.lock
 uv build
