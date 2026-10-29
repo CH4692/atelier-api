@@ -62,6 +62,15 @@ Telefonnummern werden in ihrer gespeicherten Schreibweise durchsucht.
 Ohne `q` oder bei ausschließlich Leerzeichen werden alle Kunden paginiert
 aufgelistet. Ergebnisse sind nach ID aufsteigend sortiert; ohne Treffer folgt `[]`.
 `offset` beginnt bei 0, `limit` ist standardmäßig 100 (erlaubt: 1–200).
+Der Response-Header `X-Total-Count` enthält die Gesamtanzahl passender Kunden
+vor Anwendung von `offset` und `limit`, auch bei einer leeren Seite. Der Header
+ist per CORS für zugelassene Browser-Clients lesbar. Der Antwort-Body bleibt eine
+Liste. Beispiel: Bei 23 Treffern liefert `offset=20&limit=10` drei Kunden und
+`X-Total-Count: 23`; ab `offset=23` folgt `[]` mit derselben Gesamtanzahl.
+Negative oder nicht ganzzahlige Offsets sowie Seitengrößen außerhalb von 1–200
+werden mit HTTP 422 abgewiesen. Ohne Suchfilter zählt der Header alle Kunden.
+Bei gleichzeitigem Anlegen oder Löschen können Anzahl und Seite voneinander
+abweichen, da sie durch zwei Abfragen ermittelt werden.
 Suchbegriffe sind auf 200 Zeichen begrenzt. Der bestehende Werkstatt-Zugriffsschutz
 gilt auch für die Suche.
 
@@ -465,10 +474,19 @@ dem getesteten Commit entspricht, und führt dann atomar folgende Schritte aus:
 
 1. Conventional Commits analysieren; ohne relevante Änderung sauber beenden.
 2. `project.version` und `CHANGELOG.md` aktualisieren.
-3. Mit `uv lock --upgrade-package atelier-api` nur den lokalen Paketeintrag im
+3. Im Docker-Container ausschließlich das gepinnte Build-Werkzeug `uv` installieren,
+   ohne die Anwendung oder ihre Laufzeitabhängigkeiten zu installieren. Mit
+   `uv lock --upgrade-package atelier-api` den lokalen Paketeintrag im
    Lockfile synchronisieren und reproduzierbare Artefakte bauen.
 4. Den Release-Commit `chore(release): … [skip ci]` und Tag `v…` pushen.
 5. Einen GitHub Release erstellen und Wheel sowie Source-Archiv anhängen.
+
+Der Build bricht beim ersten Fehler ab (`set -eu`). `psycopg2` bleibt als
+Anwendungstreiber unverändert; ein Distributionsbuild benötigt weder dessen
+Installation noch `pg_config`. Bei einer Installation von `psycopg2` aus Quellen
+werden weiterhin PostgreSQL-Entwicklungsdateien und ein C-Compiler benötigt.
+Ein auf dem Runner installiertes `uv` wäre im Docker-Release-Schritt nicht
+automatisch verfügbar, deshalb erfolgt die Installation im Build-Befehl selbst.
 
 Es erfolgt keine Veröffentlichung auf PyPI. `GITHUB_TOKEN`-erzeugte Commits und
 Tags starten bei GitHub keine weiteren Workflows. Das verhindert Rekursion; ein

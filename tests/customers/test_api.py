@@ -115,9 +115,12 @@ def test_get_customers_empty(client, mock_session):
     "params",
     [
         {"offset": -1},
+        {"offset": "invalid"},
+        {"offset": "1.5"},
         {"limit": 0},
         {"limit": 201},
         {"limit": "invalid"},
+        {"limit": "1.5"},
         {"q": "a" * 201},
     ],
 )
@@ -147,6 +150,76 @@ def test_customer_search_uses_bound_literal_query_and_pagination(client, mock_se
         )
     )
     assert "LIMIT 3 OFFSET 2" in literal_sql
+    count_statement = mock_session.exec.call_args_list[0].args[0]
+    count_sql = str(count_statement.compile(dialect=postgresql.dialect()))
+    assert "count(*)" in count_sql
+    assert "ILIKE" in count_sql
+    assert "LIMIT" not in count_sql and "OFFSET" not in count_sql
+    assert list(count_statement.compile().params.values()).count("50/%/_off") == 5
+
+
+@pytest.mark.parametrize(
+    "offset,limit", [(0, 1), (0, 200), (2, 2), (3, 100), (1000, 100)]
+)
+def test_customer_pagination_reports_total_on_empty_pages(
+    client, mock_session, offset, limit
+):
+    mock_session.exec.return_value.one.return_value = 3
+    mock_session.exec.return_value.all.return_value = []
+    response = client.get(
+        "/api/v1/customers", params={"offset": offset, "limit": limit}
+    )
+    assert response.status_code == 200
+    assert response.json() == []
+    assert response.headers["X-Total-Count"] == "3"
+
+
+def test_customer_pagination_defaults_and_zero_total(client, mock_session):
+    mock_session.exec.return_value.one.return_value = 0
+    mock_session.exec.return_value.all.return_value = []
+    response = client.get("/api/v1/customers")
+    assert response.headers["X-Total-Count"] == "0"
+    statement = mock_session.exec.call_args.args[0]
+    sql = str(statement.compile(compile_kwargs={"literal_binds": True}))
+    assert "ORDER BY customer.id" in sql
+    assert "LIMIT 100 OFFSET 0" in sql
+
+
+def test_customer_pagination_total_is_documented():
+    operation = app.openapi()["paths"]["/api/v1/customers"]["get"]
+    assert operation["responses"]["200"]["headers"]["X-Total-Count"]["schema"] == {
+        "type": "integer",
+        "minimum": 0,
+    }
+
+
+def test_customer_pagination_total_is_readable_by_browser(mock_session):
+    from fastapi.testclient import TestClient
+
+    from atelier_api.auth.dependencies import require_internal_user
+    from atelier_api.database import get_session
+    from atelier_api.main import create_app
+    from atelier_api.settings import Settings
+
+    application = create_app(
+        Settings(
+            _env_file=None,
+            database_url="sqlite://",
+            frontend_origins=["https://app.example.test"],
+        )
+    )
+    application.dependency_overrides[get_session] = lambda: mock_session
+    application.dependency_overrides[require_internal_user] = lambda: None
+    mock_session.exec.return_value.one.return_value = 0
+    mock_session.exec.return_value.all.return_value = []
+    with TestClient(application) as browser:
+        response = browser.get(
+            "/api/v1/customers", headers={"Origin": "https://app.example.test"}
+        )
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "https://app.example.test"
+    assert "x-total-count" in response.headers["access-control-expose-headers"].lower()
+    assert response.headers["X-Total-Count"] == "0"
 
 
 def test_create_customer_missing_required_fields(client, mock_session):

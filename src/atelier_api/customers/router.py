@@ -3,6 +3,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
+from sqlalchemy import func
 from sqlmodel import col, or_, select
 
 from atelier_api.audit.models import AuditAction, AuditResource
@@ -23,10 +24,21 @@ customers_router = APIRouter(prefix="/customers")
     tags=["customers"],
     summary="List customers",
     response_model=list[CustomerRead],
-    responses={503: {"description": "Database unavailable"}},
+    responses={
+        200: {
+            "headers": {
+                "X-Total-Count": {
+                    "description": "Number of matching customers before pagination",
+                    "schema": {"type": "integer", "minimum": 0},
+                }
+            }
+        },
+        503: {"description": "Database unavailable"},
+    },
 )
 async def get_customers(
     session: SessionDep,
+    response: Response,
     q: Annotated[str | None, Query(max_length=200)] = None,
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
@@ -36,6 +48,8 @@ async def get_customers(
     Omitted or whitespace-only queries list customers. Results are ordered by ID
     before applying offset and limit. SQL wildcard characters are treated as text.
     Full names can be searched in first-name last-name order.
+    X-Total-Count reports matching customers before pagination, including for
+    empty pages. Count and page queries may observe concurrent committed changes.
     """
     statement = select(Customer)
     if q is not None and (term := q.strip()):
@@ -53,6 +67,8 @@ async def get_customers(
                 )
             )
         )
+    total = session.exec(select(func.count()).select_from(statement.subquery())).one()
+    response.headers["X-Total-Count"] = str(total)
     customers = session.exec(
         statement.order_by(col(Customer.id)).offset(offset).limit(limit)
     ).all()
