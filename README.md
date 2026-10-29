@@ -526,6 +526,27 @@ Die in `.env` angegebene Testdatenbank muss bereits existieren. Die Integrations
 | Kunden löschen, erneuter Abruf, Erhalt anderer Kunden | Dieselben API- und Integrationstests |
 | Ungültige Eingaben und unbekannte IDs (422 / 404) | API-, Schema- und Integrationstests |
 
+#### Instrumentverwaltung gezielt testen
+
+```bash
+make test-instruments
+```
+
+Der Befehl führt die API- und Schema-Tests unter `tests/instruments/` sowie die PostgreSQL-Instrument- und Zuordnungstests aus. Die Neon-Testverbindung wird wie bei `make test` aus `.env` geladen. Die CI verwendet weiterhin `make test` und nimmt neue Testdateien automatisch mit auf.
+
+| Abnahmekriterium | Vorhandene Testabdeckung |
+| --- | --- |
+| Instrument anlegen | Alle Instrumenttypen, automatisch erzeugte ID, vollständige Details, mit und ohne Kunde |
+| Instrumente auflisten | Schema-konforme Liste gespeicherter Instrumente und leere Liste |
+| Einzelnes Instrument abrufen | Gespeicherte Details mit Kunden-ID oder `null` |
+| Instrument aktualisieren | Teilupdates, unveränderte ausgelassene Felder, neue/entfernte Kundenzuordnung, Persistenz |
+| Instrument löschen | 204 ohne Inhalt, anschließend 404 und aus Listen entfernt; andere Daten bleiben erhalten |
+| Kunden-/Instrumentbeziehung | Mehrere Instrumente pro Kunde, Trennung von Kundenlisten, Zuordnungswechsel, ungültige Fremdschlüssel |
+| Ungültige Eingaben | Fehlende/ungültige Felder, JSON-Objekt erforderlich, fehlerhaftes JSON, unveränderte Daten nach Ablehnung |
+| 404-Fälle | Unbekannte Instrumente/Kunden sowie Abruf, Update und erneutes Löschen nach einer Löschung |
+
+`tests/integration/test_instrument_lifecycle.py` verbindet Registrierung, Listen, Einzelabruf, Änderung, Kundenzuordnung und Löschung in einem durchgängigen Datenbanktest. `tests/instruments/test_request_errors.py` ergänzt ungültige JSON-Requestformen und simulierte Commit-Fehler: Ein fehlgeschlagener Schreibvorgang muss 503 statt eines Erfolgsstatus liefern und darf keine internen Fehlerdetails offenlegen. Die Anwendung selbst wird durch dieses Testticket nicht geändert.
+
 #### PostgreSQL-Integrationstests
 
 `TEST_DATABASE_URL` muss in `.env` oder der Umgebung gesetzt werden und auf eine PostgreSQL-Datenbank zeigen, deren Name auf `_test` endet. Die Datenbank muss bereits existieren; der Benutzer benötigt Rechte zum Erstellen und Löschen eigener Schemas. Niemals eine Produktionsdatenbank verwenden.
@@ -545,6 +566,7 @@ Die Tests in `tests/instruments/test_customer_api.py` und `tests/integration/tes
 | Make-Befehl | Direkter Aufruf |
 | --- | --- |
 | `make test` | `uv run pytest` |
+| `make test-instruments` | Instrument-API-, Schema- und PostgreSQL-Tests |
 | `make lint` | `uv run ruff check .` |
 | `make lint-fix` | `uv run ruff check . --fix` (ändert Dateien) |
 | `make typecheck` | `uv run mypy .` |
