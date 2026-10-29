@@ -1,4 +1,4 @@
-"""Provide authentication checks for trusted future session adapters.
+"""Provide authentication checks for trusted session and CLI adapters.
 
 This module does not issue tokens or store sessions. UserIdentity must never be
 accepted as unverified client input; a session adapter must establish authenticity.
@@ -27,12 +27,12 @@ class UserIdentity:
 
 
 def authenticate_user(
-    email: str, password: str, session: Session
+    email: str, password: str, session: Session, *, allow_customer: bool = False
 ) -> UserIdentity | None:
-    """Verify an active internal account without creating an authenticated session.
+    """Verify credentials without creating an authenticated session.
 
-    Customer-role accounts cannot sign into the workshop application. Portal
-    authentication is deliberately unavailable until its separate feature exists.
+    Customer accounts require the explicit portal flag and a linked customer.
+    Workshop authorization is enforced separately by the calling adapter.
     """
     try:
         normalized = UserBase(email=email).email
@@ -50,7 +50,10 @@ def authenticate_user(
         not valid
         or user is None
         or not user.is_active
-        or user.role == UserRole.CUSTOMER
+        or (
+            user.role == UserRole.CUSTOMER
+            and (not allow_customer or user.customer_id is None)
+        )
     ):
         return None
     assert user.id is not None

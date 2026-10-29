@@ -228,7 +228,7 @@ def test_bootstrap_is_one_time_and_cannot_be_reopened_by_user_deletion(
             user_session,
         )
     # A trusted DB operator can truncate rows; even that must not reset the latch.
-    user_session.execute(text("TRUNCATE app_user"))
+    user_session.execute(text("TRUNCATE app_user CASCADE"))
     user_session.commit()
     with pytest.raises(PermissionError, match="permanently closed"):
         bootstrap_admin(
@@ -330,7 +330,7 @@ def test_concurrent_deactivation_keeps_one_active_administrator(postgres_engine)
     finally:
         # This fixture owns a disposable schema; reset committed concurrency data.
         with postgres_engine.begin() as connection:
-            connection.execute(text("TRUNCATE app_user RESTART IDENTITY"))
+            connection.execute(text("TRUNCATE app_user RESTART IDENTITY CASCADE"))
             connection.execute(
                 text(
                     "UPDATE user_provisioning_state SET bootstrap_completed=false WHERE id=1"

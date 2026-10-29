@@ -28,10 +28,16 @@
 
 ## 2. Aktueller Implementierungsstand
 
-Aktuell sind folgende Endpunkte implementiert:
+Aktuell sind folgende Endpunkte implementiert. Alle Kunden- und Instrument-Routen
+verlangen eine gültige Sitzung mit Rolle `admin` oder `employee`. Schreibende
+Aufrufe benötigen zusätzlich die unten beschriebenen CSRF-Header. Root,
+Health und die Anmeldemöglichkeit sind öffentlich.
 
 | Methode | Pfad                       | Verhalten                                             |
 | ------- | -------------------------- | ----------------------------------------------------- |
+| `POST` | `/auth/login` | Anmeldung und neues HttpOnly-Sitzungscookie; `200`, `401`, `403` oder `429` |
+| `POST` | `/auth/logout` | Sitzung widerrufen und Cookie löschen; `204` |
+| `GET` | `/auth/me` | Aktuelles Konto einschließlich ID, E-Mail und Rolle; `200` oder `401` |
 | `GET`   | `/`                        | Gibt „Hello World“ zurück                             |
 | `GET`   | `/health/live`             | Liveness-Prüfung                                      |
 | `GET`   | `/health/ready`            | Prüft die Datenbankverbindung                         |
@@ -54,7 +60,7 @@ Aktuell sind folgende Endpunkte implementiert:
 `PATCH /customers/{customer_id}` aktualisiert nur die übergebenen Felder und liefert den vollständigen aktualisierten Kunden zurück. Die ID wird ausschließlich im Pfad angegeben. Beispiel bei laufendem Entwicklungsserver:
 
 ```bash
-curl --fail-with-body -X PATCH http://127.0.0.1:8000/customers/1 \
+curl --fail-with-body -X PATCH -b /private/tmp/atelier-cookies.txt -H 'Origin: http://127.0.0.1:8000' -H 'X-CSRF-Protection: 1' http://127.0.0.1:8000/customers/1 \
   -H 'Content-Type: application/json' \
   -d '{"first_name":"Maria","email":"maria@example.com","phone":null}'
 ```
@@ -66,7 +72,7 @@ Nicht angegebene Felder bleiben unverändert. `phone: null` entfernt die Telefon
 `DELETE /customers/{customer_id}` löscht den Kunden dauerhaft aus der Datenbank. Nach erfolgreichem Commit liefert die API HTTP 204 ohne Antwortinhalt. Der Kunde erscheint nicht mehr in der Kundenliste; ein anschließender Abruf oder erneutes Löschen liefert HTTP 404 mit `Customer not found`. Ungültige ID-Formate liefern HTTP 422. Andere Kunden bleiben unverändert.
 
 ```bash
-curl --fail-with-body -i -X DELETE http://127.0.0.1:8000/customers/1
+curl --fail-with-body -i -X DELETE -b /private/tmp/atelier-cookies.txt -H 'Origin: http://127.0.0.1:8000' -H 'X-CSRF-Protection: 1' http://127.0.0.1:8000/customers/1
 ```
 
 Der Endpunkt benötigt keinen Request-Body und ist unter `/docs` dokumentiert. Zugeordnete Instrumente bleiben beim Löschen eines Kunden erhalten; die Datenbank setzt deren `customer_id` auf `null`. Es werden keine Archivierung oder kaskadierenden Löschungen von Instrumenten implementiert.
@@ -101,7 +107,7 @@ Ein Downgrade dieser Revision entfernt die Instrumenttabelle einschließlich ihr
 `GET /customers/{customer_id}/instruments` liefert HTTP 200 und eine Liste nach `list[InstrumentRead]`. Die Abfrage prüft zuerst, ob der Kunde existiert, und filtert danach in PostgreSQL nach `instrument.customer_id`. Instrumente anderer Kunden und unzugeordnete Instrumente werden nicht zurückgegeben.
 
 ```bash
-curl --fail-with-body http://127.0.0.1:8000/customers/1/instruments
+curl --fail-with-body -b /private/tmp/atelier-cookies.txt -H 'Origin: http://127.0.0.1:8000' -H 'X-CSRF-Protection: 1' http://127.0.0.1:8000/customers/1/instruments
 ```
 
 Ein bestehender Kunde ohne Instrumente erhält `[]`; ein unbekannter Kunde erhält HTTP 404 mit `Customer not found`. Ein ungültiges ID-Format ergibt HTTP 422. Der Endpunkt erscheint unter `/docs` im Bereich `customers`. Die Liste bildet die **aktuelle Zuordnung** ab: Nach einem Kundenwechsel erscheint das Instrument beim neuen Kunden; nach Aufheben der Zuordnung bei keinem Kunden. Frühere Eigentümer oder Zuordnungen werden nicht historisiert. Es gibt noch keine Pagination oder festgelegte Sortierreihenfolge.
@@ -111,7 +117,7 @@ Ein bestehender Kunde ohne Instrumente erhält `[]`; ein unbekannter Kunde erhä
 `GET /instruments` liefert HTTP 200 und eine JSON-Liste mit dem Antwortschema `list[InstrumentRead]`. Jeder Eintrag enthält ID, Typ, Hersteller, Baujahr, Identifikationsnummer, Notizen und die optionale Kunden-ID. Unzugeordnete Instrumente werden ebenfalls angezeigt. Sind keine Instrumente vorhanden, ist die Antwort `[]`. Eine Sortierreihenfolge oder Pagination ist noch nicht festgelegt. Der Endpunkt erscheint unter `/docs`.
 
 ```bash
-curl --fail http://127.0.0.1:8000/instruments
+curl --fail -b /private/tmp/atelier-cookies.txt -H 'Origin: http://127.0.0.1:8000' -H 'X-CSRF-Protection: 1' http://127.0.0.1:8000/instruments
 ```
 
 ### Einzelnes Instrument abrufen
@@ -119,7 +125,7 @@ curl --fail http://127.0.0.1:8000/instruments
 `GET /instruments/{instrument_id}` liefert HTTP 200 mit dem Schema `InstrumentRead`: ID, Typ, Hersteller, Baujahr, Identifikationsnummer, Notizen und die zugeordnete `customer_id`. Bei Instrumenten ohne Kundenzuordnung ist `customer_id` gleich `null`. Es wird keine Kundeninstanz eingebettet. Nach dem Löschen eines zugeordneten Kunden bleibt das Instrument abrufbar und die Kunden-ID wird `null`.
 
 ```bash
-curl --fail-with-body http://127.0.0.1:8000/instruments/1
+curl --fail-with-body -b /private/tmp/atelier-cookies.txt -H 'Origin: http://127.0.0.1:8000' -H 'X-CSRF-Protection: 1' http://127.0.0.1:8000/instruments/1
 ```
 
 Eine unbekannte Instrument-ID liefert HTTP 404 mit `Instrument not found`; ein ungültiges ID-Format liefert HTTP 422. Der Endpunkt ist unter `/docs` dokumentiert.
@@ -129,7 +135,7 @@ Eine unbekannte Instrument-ID liefert HTTP 404 mit `Instrument not found`; ein u
 `PATCH /instruments/{instrument_id}` ändert nur die angegebenen Felder und liefert mit HTTP 200 den vollständigen aktualisierten Datensatz nach `InstrumentRead` zurück:
 
 ```bash
-curl --fail-with-body -X PATCH http://127.0.0.1:8000/instruments/1 \
+curl --fail-with-body -X PATCH -b /private/tmp/atelier-cookies.txt -H 'Origin: http://127.0.0.1:8000' -H 'X-CSRF-Protection: 1' http://127.0.0.1:8000/instruments/1 \
   -H 'Content-Type: application/json' \
   -d '{"maker":"Updated maker","year_of_manufacture":1930,"customer_id":2}'
 ```
@@ -143,7 +149,7 @@ Ein unbekanntes Instrument ergibt HTTP 404 mit `Instrument not found`. Ein unbek
 `DELETE /instruments/{instrument_id}` löscht ein Instrument dauerhaft und liefert nach erfolgreichem Commit HTTP 204 ohne Antwortinhalt. Die zugeordnete Kundenakte und andere Instrumente bleiben unverändert. Das gelöschte Instrument erscheint nicht mehr in `GET /instruments`; Einzelabruf und erneutes Löschen ergeben HTTP 404 mit `Instrument not found`. Ungültige ID-Formate ergeben HTTP 422. Der Endpunkt benötigt keinen Request-Body und ist unter `/docs` dokumentiert.
 
 ```bash
-curl --fail-with-body -i -X DELETE http://127.0.0.1:8000/instruments/1
+curl --fail-with-body -i -X DELETE -b /private/tmp/atelier-cookies.txt -H 'Origin: http://127.0.0.1:8000' -H 'X-CSRF-Protection: 1' http://127.0.0.1:8000/instruments/1
 ```
 
 ### Instrument registrieren
@@ -151,7 +157,7 @@ curl --fail-with-body -i -X DELETE http://127.0.0.1:8000/instruments/1
 Nach Anwendung der Migrationen akzeptiert `POST /instruments` beispielsweise:
 
 ```bash
-curl --fail-with-body -X POST http://127.0.0.1:8000/instruments \
+curl --fail-with-body -X POST -b /private/tmp/atelier-cookies.txt -H 'Origin: http://127.0.0.1:8000' -H 'X-CSRF-Protection: 1' http://127.0.0.1:8000/instruments \
   -H 'Content-Type: application/json' \
   -d '{"type":"violin","maker":"Example maker","year_of_manufacture":1920,"identification_number":"LABEL-42","notes":"Reparierte Decke.","customer_id":1}'
 ```
@@ -208,23 +214,151 @@ Der Service verlangt bei jeder Verwaltungsoperation eine frisch geprüfte Admini
 
 Kunden können ohne Benutzerkonto bestehen. Eine gleiche E-Mail erzeugt keine Zuordnung. Administratoren können eine vorhandene Kunden-ID ausdrücklich zuordnen oder entfernen; Fremdschlüssel und Unique-Constraint erlauben zunächst höchstens ein Konto pro Kunde. Weitere Konten ohne Kundenzuordnung bleiben möglich. Beim Löschen eines Kunden wird die Referenz aufgehoben; beim Löschen oder Deaktivieren eines Kontos bleiben Kunden und Instrumente erhalten.
 
-`customer` ist eine vorbereitete Datenmodellrolle. Auch aktive und korrekt zugeordnete Konten dieser Rolle können sich nicht an der internen Werkstattanwendung authentifizieren. Portalzugang, Einladungen und deren Aktivierung werden durch dieses Ticket nicht bereitgestellt; eine gültige Kundenbeziehung allein aktiviert keinen Portalzugang.
+Kundenanmeldung ist standardmäßig durch `CUSTOMER_PORTAL_AUTH_ENABLED=false`
+gesperrt. Die technische Freigabe `true` erlaubt nur aktiven Konten mit
+Kundenzuordnung die Anmeldung und `/auth/me`. Auch dann bleiben interne
+Kunden- und Instrument-Routen mit HTTP 403 gesperrt. Einladungen und eine
+Kundenportal-Oberfläche sind noch nicht implementiert.
 
-#### Authentifizierung und spätere Sitzungsintegration
+#### Sichere Sitzungsanmeldung
 
-`users.authentication.authenticate_user` verifiziert Passwort und aktuellen Kontostatus und liefert für aktive interne Konten eine `UserIdentity(user_id, auth_version)`. Sie erstellt keinen Token und keine Sitzung. Inaktive Konten, falsche Passwörter und Portalrollen werden abgewiesen.
+Nach `make db-migrate` und dem oben beschriebenen Benutzer-Bootstrap stehen
+`POST /auth/login`, `POST /auth/logout` und `GET /auth/me` bereit.
+Login akzeptiert JSON mit `email` und `password`; die E-Mail wird getrimmt und
+kleingeschrieben. Passwortprüfung erfolgt über Argon2id. Unbekannte E-Mail,
+ungültige E-Mail, falsches Passwort, inaktive Konten und gesperrte Portalrollen
+erhalten dieselbe Antwort: HTTP 401 mit `Invalid credentials`.
+Fehlende oder strukturell ungültige JSON-Felder ergeben eine generische 422-Antwort.
 
-Ein zukünftiger vertrauenswürdiger Sitzungsadapter muss die Herkunft seiner Sitzungsdaten prüfen und vor jeder geschützten Aktion `require_active_user(identity, session)` aufrufen. `UserIdentity` darf niemals ungeprüft aus Client-JSON übernommen werden. Die Verwaltungsservices führen diese Live-Prüfung bereits selbst aus.
+Jede Anmeldung erzeugt einen neuen zufälligen Token aus 32 kryptographisch
+zufälligen Bytes. PostgreSQL enthält ausschließlich dessen SHA-256-Verifier in
+`user_session`, mit eindeutigem Index, Benutzer-Fremdschlüssel und
+UTC-Zeitstempeln. Der Browser erhält den Token ausschließlich als Cookie;
+Antwort-JSON und Logs enthalten weder Token noch Passwort oder Hash.
+Eine erneute Anmeldung im selben Browser widerruft dessen bisherige Sitzung.
+Andere Geräte behalten ihre eigenen Sitzungen.
 
-Ein Datenbanktrigger erhöht `auth_version` bei Deaktivierung sowie Rollen-, Passwort- oder Zuordnungsänderungen. Damit werden alle älteren Identitäten gleichzeitig ungültig. Reaktivierung setzt den Zähler nicht zurück; alte Identitäten bleiben gesperrt und nur eine erneute Passwortprüfung liefert eine gültige Identität. Derselbe Trigger aktualisiert `updated_at` und erhält `created_at`.
+`get_current_user` prüft bei jeder geschützten Anfrage die Sitzung sowie den
+aktuellen Kontostatus und `auth_version`. Standardmäßig gelten 30 Minuten
+Inaktivität und acht Stunden absolute Lebensdauer. Aktivität aktualisiert nur
+`last_activity_at`, niemals `expires_at`. Abgelaufene, widerrufene oder
+fehlende Cookies ergeben 401. Deaktivierung, Rollen-, Passwort- und
+Kundenzuordnungsänderungen widerrufen bestehende Sitzungen auch im
+Datenbanktrigger; Reaktivierung macht alte Cookies nicht wieder gültig.
+Autorisierung erfolgt separat durch `require_internal_user`.
 
-**Umfangsgrenze:** Login-/Logout-Endpunkte, Session-Store, Cookies, JWT, Passwort-Reset und MFA sind nicht implementiert. Die Kriterien zu bestehenden Sitzungen sind hier als Widerrufs- und Prüfvertrag vorbereitet; eine automatische Abmeldung in HTTP-Anfragen benötigt die ausdrücklich ausgeklammerte Sitzungsintegration. Die bestehenden Kunden- und Instrument-Endpunkte werden noch nicht durch Authentifizierungs-Middleware geschützt.
+Logout benötigt dieselben CSRF-Header wie Login, widerruft die Sitzung in
+PostgreSQL und entfernt das Cookie mit identischen Sicherheitsattributen.
+Wiederholter Logout liefert weiterhin 204. Authentifizierungsantworten und
+Sicherheitsfehler erhalten `Cache-Control: no-store`.
+
+#### Umgebung, Cookies und Frontend
+
+| Variable | Standard / Bedeutung |
+| --- | --- |
+| `ENVIRONMENT` | `development` lokal, im Produktivbetrieb ausdrücklich `production` setzen |
+| `FRONTEND_ORIGINS` | JSON-Liste exakter erlaubter Origins; lokal localhost/127.0.0.1 mit Port 3000/8000 |
+| `SESSION_IDLE_SECONDS` | `1800`, serverseitiger Inaktivitätsablauf |
+| `SESSION_ABSOLUTE_SECONDS` | `28800`, absolute Lebensdauer; mindestens so lang wie der Inaktivitätsablauf |
+| `LOGIN_ACCOUNT_LIMIT` | `10` Versuche pro normalisierter E-Mail und Zeitfenster |
+| `LOGIN_IP_LIMIT` | `30` Versuche pro Client-IP und Zeitfenster |
+| `LOGIN_WINDOW_SECONDS` | `900`, Zeitfenster für beide Login-Limits |
+| `TRUSTED_PROXY_IPS` | JSON-Liste von Proxy-IP-Adressen/CIDRs, standardmäßig leer |
+| `CUSTOMER_PORTAL_AUTH_ENABLED` | `false`; separates Freigabesignal für künftigen Portalzugriff |
+
+Produktion setzt beispielsweise
+`ENVIRONMENT=production` und
+`FRONTEND_ORIGINS='["https://app.example.com"]'`, mit
+`https://api.example.com` als API. Beide Hosts liegen unter derselben
+registrierbaren Domain und verwenden HTTPS, sodass `SameSite=Lax` funktioniert.
+Das Cookie heißt `__Host-session`, mit `Secure; HttpOnly; SameSite=Lax; Path=/`
+und ohne `Domain`. Es bleibt ausschließlich an den API-Host gebunden.
+Produktionsanfragen über HTTP werden abgewiesen; Sicherheitsattribute lassen
+sich dort nicht einzeln abschalten.
+
+Für lokale HTTP-Entwicklung heißt das getrennte Cookie `dev-session` und
+verzichtet auf `Secure`. Frontend und API sollten beide `localhost` oder
+beide `127.0.0.1` verwenden; diese Hostnamen nicht mischen.
+In Entwicklung und Produktion muss das Frontend `credentials: "include"`
+verwenden. Kein Token gehört in localStorage oder sessionStorage.
+
+Die CSRF-Strategie kombiniert **verpflichtenden exakten Origin-Abgleich** und
+**verpflichtenden Custom-Header `X-CSRF-Protection: 1`** für Login, Logout und
+alle schreibenden authentifizierten Anfragen. Dieser Header erzwingt bei
+Cross-Origin-Anfragen einen Browser-Preflight; CORS erlaubt nur die expliziten
+Origins und unterstützt Credentials. Wildcards, Origin `null` und fehlende
+Header werden abgewiesen. Der Headerwert ist kein Geheimnis: Diese
+[OWASP-Custom-Header-Strategie](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#employing-custom-request-headers-for-ajaxapi)
+benötigt hier keinen zusätzlichen CSRF-Token. Freigegebene Frontend-Origins
+müssen vertrauenswürdig bleiben.
+
+Beispiel für eine Frontend-Anmeldung; `email` und `password` stammen aus dem
+Anmeldeformular:
+
+```javascript
+const api = "http://localhost:8000"; // Produktion: https://api.example.com
+const login = await fetch(api + "/auth/login", {
+  method: "POST",
+  credentials: "include",
+  headers: { "Content-Type": "application/json", "X-CSRF-Protection": "1" },
+  body: JSON.stringify({ email, password }),
+});
+if (!login.ok) throw new Error("Anmeldung fehlgeschlagen");
+const me = await fetch(api + "/auth/me", { credentials: "include" });
+const logout = await fetch(api + "/auth/logout", {
+  method: "POST",
+  credentials: "include",
+  headers: { "X-CSRF-Protection": "1" },
+});
+```
+
+Der Browser setzt `Origin` selbst. Bei curl/anderen HTTP-Clients müssen
+`Origin` und der Custom-Header ausdrücklich mitgesendet und Cookies mit einer
+Cookie-Jar gespeichert bzw. wiederverwendet werden. Die fachlichen curl-Beispiele
+oben setzen eine zuvor erstellte Cookie-Jar `/private/tmp/atelier-cookies.txt`
+voraus. Swagger zeigt die Endpunkte; für schreibende Tests im Browser muss
+ebenfalls der Custom-Header gesetzt werden.
+
+`atelier-api` vertraut standardmäßig keinen Forwarded-Headern. Hinter einem
+Reverse Proxy nur dessen tatsächliche IP/Netze in `TRUSTED_PROXY_IPS` eintragen.
+Der Proxy muss eingehende Forwarded-Header entfernen/überschreiben und
+`X-Forwarded-For` und `X-Forwarded-Proto` selbst setzen; direkter externer
+Zugriff auf den Backend-Port muss gesperrt sein. Der dokumentierte CLI-Start
+übergibt die Allowlist an Uvicorn. Bei anderen ASGI-Startbefehlen ist dieselbe
+explizite Proxy-Konfiguration erforderlich; niemals `forwarded-allow-ips="*"`.
+
+#### Login-Limits und Bereinigung
+
+PostgreSQL-Upserts zählen Versuche atomar und gemeinsam für alle API-Instanzen.
+Auch erfolgreiche Versuche zählen; weder Logout noch eine neue Instanz setzen
+das Limit zurück. IP- und Account-Schlüssel werden gehasht gespeichert.
+Unbekannte und bekannte E-Mails erhalten dieselben Limits. Bei Überschreitung
+folgen HTTP 429 und `Retry-After`. Ereignisse `auth_login_failed`,
+`auth_login_throttled` und `auth_login_succeeded` ermöglichen Monitoring ohne
+E-Mail, Passwort oder Token zu protokollieren.
+
+Regelmäßig als Betreiberprozess, beispielsweise über einen stündlichen Scheduler:
+
+```bash
+uv run atelier-sessions-cleanup
+```
+
+Der Befehl verwendet `DATABASE_URL`, entfernt widerrufene, inaktive oder absolut
+abgelaufene Sitzungen und veraltete Rate-Limit-Zähler und gibt nur die Anzahl
+entfernter Sitzungen aus. „Inaktiv“ bedeutet hier Überschreitung des
+Sitzungs-Inaktivitätszeitlimits.
+
+Migration `d03a8f762c11` erstellt Sitzungen und Login-Zähler und erweitert den
+bestehenden Widerrufstrigger. Ein Downgrade entfernt alle Sitzungen und Zähler,
+erhält Benutzer und Werkstattdaten und stellt den vorherigen Trigger wieder her.
+JWT, Redis, Registrierung, Passwort-Reset, MFA und eine Sitzungsverwaltung für
+Endnutzer gehören nicht zum Umfang.
 
 Die neue Migration `c91e4a702b68` baut auf `b75d90ae3214` auf. Bestehende Konten erhalten die Rolle `employee`; fehlende Zeitstempel werden mit dem Migrationszeitpunkt belegt. Kunden und Instrumente werden nicht verändert. Ein Downgrade der Erweiterung erhält E-Mail, Hash und Aktivierungsstatus, entfernt aber Rollen, Zeitstempel, Kundenzuordnungen, Widerrufsversionen und Bootstrap-Zustand. Dafür ist ein Wartungsfenster mit Invalidierung externer Sitzungen notwendig. Ein weiterer Downgrade der Basisrevision entfernt die Kontentabelle.
 
 **Wichtige offene Befunde der Bestandsaufnahme:**
 
-- **Hoch:** Authentifizierung und Autorisierung fehlen; keine echten Kundendaten in einer öffentlich erreichbaren Instanz verwenden.
+- **Hoch:** Produktivkonfiguration, HTTPS-Proxy, Backups und Betrieb müssen vor Nutzung echter Kundendaten eingerichtet und geprüft werden.
 - **Mittel:** Synchrone Datenbankaufrufe innerhalb von `async def`-Routen.
 - **Mittel:** Fehlende Pagination, Sortierung und stärkere Eingabevalidierung.
 - **Mittel:** Eine Konfiguration für den produktiven Betrieb steht noch aus.
@@ -333,7 +467,7 @@ Kennzeichnung: **MVP** = für den ersten nutzbaren Pilotablauf vorgesehen; **Pha
 
 Die verbindlichen Regeln für Feature-Module, gemeinsame Dependencies, Services und Imports stehen in [Modulstruktur und Architektur](docs/architecture.md). Neue Features folgen dem dort beschriebenen Muster.
 
-Der Datenfluss ist `HTTP/JSON → FastAPI-Router → Datenbank-Session → SQLModel/SQLAlchemy → PostgreSQL`.
+Der Datenfluss ist `HTTP/JSON → Authentifizierung/Autorisierung → FastAPI-Router → Datenbank-Session → SQLModel/SQLAlchemy → PostgreSQL`.
 
 ```text
 src/atelier_api/
@@ -344,6 +478,7 @@ src/atelier_api/
 ├── customers/        # Kunden-Router, API-Schemas und Tabellenmodell
 ├── instruments/      # Instrument-Router, Tabellenmodell und Schemas
 ├── users/            # Benutzer, Passwort-Hashing und Aktivierungsservice
+├── auth/             # Sitzungen, Login, CSRF und Rollenabhängigkeiten
 └── health/           # Liveness und Datenbank-Readiness
 alembic/              # Migrationskonfiguration und versionierte Schemaänderungen
 tests/                # API- und Schema-Tests
@@ -390,7 +525,7 @@ Wichtige Regeln:
 - [x] Wheel-Paketierung korrigieren und Installation aus gebautem Wheel testen.
 - [x] CLI-Einstiegspunkt reparieren.
 - [x] Lokale Einrichtung, Migrationen und Testausführung dokumentieren.
-- [ ] Authentifizierung und Berechtigungen implementieren.
+- [x] Sitzungsanmeldung und Zugriffsschutz für interne Werkstattdaten implementieren.
 - [x] PostgreSQL-Integrationstests für Kunden und Migrationen mit isolierten Testdaten einrichten.
 - [ ] Backup-, Restore- und Fehlerprotokollierungsstrategie festlegen.
 - [ ] Datenbankzugriff konsistent gestalten (z. B. synchrone Routen bei synchronem Treiber).
@@ -572,7 +707,7 @@ make test
 # Gleichwertig: uv run pytest
 ```
 
-pytest lädt `.env` automatisch vor dem Anwendungsimport. Exportierte Variablen haben Vorrang, sodass die CI ihre Container-Verbindungen verwendet. Lokal werden die Neon-Verbindungen aus `.env` genutzt. Die API-Tests verwenden gemockte Sessions; echte Datenbankoperationen laufen über `TEST_DATABASE_URL`. Nur bei vollständig fehlender `DATABASE_URL` in Umgebung und `.env` gibt es noch eine SQLite-Adresse zur Initialisierung. Vorhandene Dependency-Overrides werden nach jedem Test wiederhergestellt.
+pytest lädt `.env` automatisch vor dem Anwendungsimport. Exportierte Variablen haben Vorrang, sodass die CI ihre Container-Verbindungen verwendet. Lokal werden die Neon-Verbindungen aus `.env` genutzt. Die bisherigen fachlichen API-Tests isolieren die Anmeldung über einen Test-Override; die Authentifizierungstests nutzen eine eigene App ohne diesen Override. Die isolierten API-Tests verwenden gemockte Sessions; echte Datenbankoperationen laufen über `TEST_DATABASE_URL`. Nur bei vollständig fehlender `DATABASE_URL` in Umgebung und `.env` gibt es noch eine SQLite-Adresse zur Initialisierung. Vorhandene Dependency-Overrides werden nach jedem Test wiederhergestellt.
 
 Mit `TEST_DATABASE_URL` in `.env` führt der folgende Befehl automatisch auch alle PostgreSQL-Integrationstests aus:
 
@@ -636,6 +771,13 @@ Die Tests in `tests/instruments/test_customer_api.py` und `tests/integration/tes
 | `make typecheck` | `uv run mypy .` |
 | `make format-check` | `uv run ruff format --check .` |
 | `make format` | `uv run ruff format .` (ändert Dateien) |
+
+`tests/integration/test_auth.py` prüft die echte PostgreSQL-Sitzungsanmeldung
+einschließlich Rollen, generischer Fehler, Cookie-Attribute, Rotation,
+Inaktivitäts- und Absolutablauf, Logout/Replay, Kontoänderungen, CSRF, exaktem
+CORS und instanzübergreifenden Rate-Limits. Sitzungen und Login-Zähler werden
+wie Werkstattdaten je Test zurückgerollt und auf vollständige Bereinigung geprüft.
+Ein gezielter Lauf: `uv run pytest tests/integration/test_auth.py`.
 
 Die GitHub-Actions-CI startet PostgreSQL 17 für Tests und Migrationsprüfungen und wendet Migrationen vor den Tests an. Der Test-Job setzt `TEST_DATABASE_URL` und führt mit `make test` alle Tests einschließlich der Integrationstests aus; deren Fixtures prüfen zusätzlich Migrationen in einem leeren Schema. Ein eigener Job baut und installiert das Wheel in einer frischen Umgebung und prüft die Anwendung außerhalb des Quellcodeverzeichnisses.
 

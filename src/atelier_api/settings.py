@@ -1,6 +1,10 @@
 """Load shared application and migration settings from the environment."""
 
-from pydantic import Field, field_validator
+from ipaddress import ip_network
+from typing import Literal
+from urllib.parse import urlsplit
+
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError, NoSuchModuleError
@@ -16,6 +20,76 @@ class Settings(BaseSettings):
     database_url: str
     # Accept the local test setting in the shared .env without using it at runtime.
     test_database_url: str | None = Field(default=None, repr=False)
+
+    environment: Literal["development", "production"] = "development"
+    frontend_origins: list[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ]
+    session_idle_seconds: int = Field(default=1800, gt=0)
+    session_absolute_seconds: int = Field(default=28800, gt=0)
+    login_account_limit: int = Field(default=10, gt=0)
+    login_ip_limit: int = Field(default=30, gt=0)
+    login_window_seconds: int = Field(default=900, gt=0)
+    trusted_proxy_ips: list[str] = []
+    customer_portal_auth_enabled: bool = False
+
+    @property
+    def session_cookie_name(self) -> str:
+        """Keep production cookies host-bound and distinct from HTTP development."""
+        return "__Host-session" if self.environment == "production" else "dev-session"
+
+    @property
+    def secure_cookies(self) -> bool:
+        """Prevent configuration from disabling production cookie transport security."""
+        return self.environment == "production"
+
+    @field_validator("frontend_origins")
+    @classmethod
+    def validate_origins(cls, values: list[str]) -> list[str]:
+        """Allow explicit HTTP(S) origins only, without wildcard or path matching."""
+        if not values:
+            raise ValueError("At least one frontend origin is required")
+        for value in values:
+            parsed = urlsplit(value)
+            if (
+                parsed.scheme not in {"http", "https"}
+                or not parsed.hostname
+                or parsed.username
+                or parsed.password
+                or parsed.path
+                or parsed.query
+                or parsed.fragment
+                or "*" in value
+                or value != f"{parsed.scheme}://{parsed.netloc}"
+            ):
+                raise ValueError(
+                    "Frontend origins must be explicit HTTP(S) origins without paths"
+                )
+        return values
+
+    @field_validator("trusted_proxy_ips")
+    @classmethod
+    def validate_proxies(cls, values: list[str]) -> list[str]:
+        """Trust forwarded client addresses only from explicitly configured networks."""
+        for value in values:
+            ip_network(value, strict=False)
+        return values
+
+    @model_validator(mode="after")
+    def validate_security(self) -> Settings:
+        """Reject production origins that would require insecure cookies."""
+        if self.environment == "production" and any(
+            not origin.startswith("https://") for origin in self.frontend_origins
+        ):
+            raise ValueError("Production frontend origins must use HTTPS")
+        if self.session_absolute_seconds < self.session_idle_seconds:
+            raise ValueError(
+                "Absolute session lifetime must not be shorter than inactivity timeout"
+            )
+        return self
 
     @field_validator("database_url")
     @classmethod

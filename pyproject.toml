@@ -24,6 +24,7 @@ entrypoint = "atelier_api.main:app"
 [project.scripts]
 atelier-api = "atelier_api.cli:main"
 atelier-users = "atelier_api.users.cli:main"
+atelier-sessions-cleanup = "atelier_api.auth.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.13.1,<0.14.0"]

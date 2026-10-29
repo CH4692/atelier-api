@@ -22,10 +22,17 @@ def pytest_configure(config: pytest.Config) -> None:
 
 @pytest.fixture
 def client() -> Iterator[TestClient]:
+    from atelier_api.auth.dependencies import require_internal_user
     from atelier_api.main import app
 
-    with TestClient(app) as test_client:
-        yield test_client
+    original = app.dependency_overrides.copy()
+    app.dependency_overrides[require_internal_user] = lambda: None
+    try:
+        with TestClient(app) as test_client:
+            yield test_client
+    finally:
+        app.dependency_overrides.clear()
+        app.dependency_overrides.update(original)
 
 
 @pytest.fixture

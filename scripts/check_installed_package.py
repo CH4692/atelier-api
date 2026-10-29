@@ -26,6 +26,9 @@ def main() -> None:
 
     routes = set(app.openapi()["paths"])
     assert {
+        "/auth/login",
+        "/auth/logout",
+        "/auth/me",
         "/customers",
         "/customers/{customer_id}",
         "/customers/{customer_id}/instruments",
@@ -38,9 +41,15 @@ def main() -> None:
         response = client.get("/health/live")
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
+        assert client.get("/auth/me").status_code == 401
+        assert client.get("/instruments").status_code == 401
 
     entrypoint = next(ep for ep in package.entry_points if ep.name == "atelier-api")
     assert callable(entrypoint.load())
+    cleanup = next(
+        ep for ep in package.entry_points if ep.name == "atelier-sessions-cleanup"
+    )
+    assert callable(cleanup.load())
     subprocess.run(
         [str(Path(sys.executable).parent / "atelier-api"), "--help"], check=True
     )
