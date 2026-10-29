@@ -31,6 +31,7 @@ def main() -> None:
         "/health/live",
         "/health/ready",
         "/instruments",
+        "/instruments/{instrument_id}",
     } <= routes
     with TestClient(app) as client:
         response = client.get("/health/live")

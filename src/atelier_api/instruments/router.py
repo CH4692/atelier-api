@@ -1,4 +1,4 @@
-"""Register and list instruments with their optional customer association."""
+"""Register and retrieve instruments with their optional customer association."""
 
 from fastapi import APIRouter, HTTPException, status
 from sqlmodel import select
@@ -26,6 +26,32 @@ def get_instruments(session: SessionDep) -> list[InstrumentRead]:
     """
     instruments = session.exec(select(Instrument)).all()
     return [InstrumentRead.model_validate(instrument) for instrument in instruments]
+
+
+@instruments_router.get(
+    "/{instrument_id}",
+    summary="Get an instrument by ID",
+    response_model=InstrumentRead,
+    responses={
+        404: {"description": "Instrument not found"},
+        503: {"description": "Database unavailable"},
+    },
+)
+def get_instrument_by_id(instrument_id: int, session: SessionDep) -> InstrumentRead:
+    """Return the instrument details and its optional associated customer ID.
+
+    Unassigned instruments include customer_id as null.
+
+    Raises:
+        HTTPException: With status 404 if the instrument does not exist.
+    """
+    instrument = session.get(Instrument, instrument_id)
+    if instrument is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Instrument not found",
+        )
+    return InstrumentRead.model_validate(instrument)
 
 
 @instruments_router.post(

@@ -123,3 +123,48 @@ def test_list_instruments_returns_empty_list_from_postgresql(postgres_client):
     response = postgres_client.get("/instruments")
     assert response.status_code == 200
     assert response.json() == []
+
+
+@pytest.mark.parametrize("with_customer", [True, False])
+def test_get_registered_instrument_by_id(postgres_client, with_customer):
+    customer_id = None
+    if with_customer:
+        response = postgres_client.post(
+            "/customers",
+            json={
+                "first_name": "Maria",
+                "last_name": "Doe",
+                "email": "maria@example.com",
+            },
+        )
+        assert response.status_code == 201
+        customer_id = response.json()["id"]
+    payload = {
+        "type": "violin",
+        "maker": "Example maker",
+        "year_of_manufacture": 1920,
+        "identification_number": "LABEL-42",
+        "notes": "Repaired top.",
+        "customer_id": customer_id,
+    }
+    response = postgres_client.post("/instruments", json=payload)
+    assert response.status_code == 201
+    created = response.json()
+    path = f"/instruments/{created['id']}"
+    response = postgres_client.get(path)
+    assert response.status_code == 200
+    assert response.json() == created
+    assert response.json()["customer_id"] == customer_id
+
+    if with_customer:
+        response = postgres_client.delete(f"/customers/{customer_id}")
+        assert response.status_code == 204
+        response = postgres_client.get(path)
+        assert response.status_code == 200
+        assert response.json() == {**created, "customer_id": None}
+
+
+def test_get_unknown_instrument_returns_404_from_postgresql(postgres_client):
+    response = postgres_client.get("/instruments/999999")
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Instrument not found"}

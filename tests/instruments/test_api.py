@@ -178,3 +178,58 @@ def test_list_instruments_is_documented_as_array_in_openapi():
     assert schema["type"] == "array"
     assert schema["items"]["$ref"].endswith("/InstrumentRead")
     assert "503" in operation["responses"]
+
+
+@pytest.mark.parametrize("customer_id", [7, None])
+def test_get_instrument_returns_details_and_customer_id(
+    client, mock_session, customer_id
+):
+    mock_session.get.return_value = Instrument(
+        id=42,
+        type=InstrumentType.VIOLIN,
+        maker="Example maker",
+        year_of_manufacture=1920,
+        identification_number="LABEL-42",
+        notes="Repaired top.",
+        customer_id=customer_id,
+    )
+    response = client.get("/instruments/42")
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": 42,
+        "type": "violin",
+        "maker": "Example maker",
+        "year_of_manufacture": 1920,
+        "identification_number": "LABEL-42",
+        "notes": "Repaired top.",
+        "customer_id": customer_id,
+    }
+    mock_session.get.assert_called_once_with(Instrument, 42)
+    mock_session.commit.assert_not_called()
+
+
+@pytest.mark.parametrize("instrument_id", [0, -1, 999999])
+def test_get_unknown_instrument_returns_404(client, mock_session, instrument_id):
+    mock_session.get.return_value = None
+    response = client.get(f"/instruments/{instrument_id}")
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Instrument not found"}
+    mock_session.get.assert_called_once_with(Instrument, instrument_id)
+    mock_session.commit.assert_not_called()
+
+
+def test_get_instrument_rejects_invalid_id(client, mock_session):
+    response = client.get("/instruments/invalid")
+    assert response.status_code == 422
+    mock_session.get.assert_not_called()
+
+
+def test_get_instrument_is_documented_in_openapi():
+    operation = app.openapi()["paths"]["/instruments/{instrument_id}"]["get"]
+    assert {"200", "404", "422", "503"} <= operation["responses"].keys()
+    schema = operation["responses"]["200"]["content"]["application/json"]["schema"]
+    assert schema["$ref"].endswith("/InstrumentRead")
+    (parameter,) = operation["parameters"]
+    assert parameter["name"] == "instrument_id"
+    assert parameter["in"] == "path"
+    assert parameter["required"] is True

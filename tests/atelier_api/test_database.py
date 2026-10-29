@@ -7,7 +7,7 @@ from sqlalchemy.exc import InterfaceError, OperationalError, TimeoutError
 from atelier_api.main import app
 
 
-@pytest.mark.parametrize("path", ["/customers", "/instruments"])
+@pytest.mark.parametrize("path", ["/customers", "/instruments", "/instruments/1"])
 @pytest.mark.parametrize("error_type", [OperationalError, InterfaceError, TimeoutError])
 def test_database_failure_returns_503_without_credentials(error_type, path):
     error = (
@@ -17,6 +17,7 @@ def test_database_failure_returns_503_without_credentials(error_type, path):
     )
     session = MagicMock()
     session.exec.side_effect = error
+    session.get.side_effect = error
     with patch("atelier_api.database.Session") as session_class:
         session_class.return_value.__enter__.return_value = session
         response = TestClient(app).get(path)

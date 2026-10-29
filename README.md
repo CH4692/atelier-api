@@ -42,6 +42,7 @@ Aktuell sind folgende Endpunkte implementiert:
 | `DELETE` | `/customers/{customer_id}` | Löscht einen Kunden dauerhaft; `204` ohne Inhalt, bei unbekannter ID `404` |
 | `POST` | `/instruments` | Registriert ein Instrument; `201`, bei unbekanntem Kunden `404` |
 | `GET` | `/instruments` | Liefert alle registrierten Instrumente als Liste; `200`, auch bei leerer Liste |
+| `GET` | `/instruments/{instrument_id}` | Liefert Instrumentdetails mit optionaler Kunden-ID; `200`, bei unbekannter ID `404` |
 
 **Aktuelles Kundenmodell:** numerische ID, Vorname, Nachname, E-Mail-Adresse und optionale Telefonnummer. Kundendaten können teilweise aktualisiert werden. Kunden können dauerhaft gelöscht werden. Suche, Filter und Pagination sind noch nicht implementiert.
 
@@ -99,6 +100,16 @@ Ein Downgrade dieser Revision entfernt die Instrumenttabelle einschließlich ihr
 ```bash
 curl --fail http://127.0.0.1:8000/instruments
 ```
+
+### Einzelnes Instrument abrufen
+
+`GET /instruments/{instrument_id}` liefert HTTP 200 mit dem Schema `InstrumentRead`: ID, Typ, Hersteller, Baujahr, Identifikationsnummer, Notizen und die zugeordnete `customer_id`. Bei Instrumenten ohne Kundenzuordnung ist `customer_id` gleich `null`. Es wird keine Kundeninstanz eingebettet. Nach dem Löschen eines zugeordneten Kunden bleibt das Instrument abrufbar und die Kunden-ID wird `null`.
+
+```bash
+curl --fail-with-body http://127.0.0.1:8000/instruments/1
+```
+
+Eine unbekannte Instrument-ID liefert HTTP 404 mit `Instrument not found`; ein ungültiges ID-Format liefert HTTP 422. Der Endpunkt ist unter `/docs` dokumentiert.
 
 ### Instrument registrieren
 
