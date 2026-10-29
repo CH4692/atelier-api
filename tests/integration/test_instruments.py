@@ -125,7 +125,7 @@ def test_customer_deletion_keeps_instrument_and_clears_association(
         session.commit()
         session.refresh(instrument)
         instrument_id = instrument.id
-    response = postgres_client.delete(f"/customers/{instrument_customer_id}")
+    response = postgres_client.delete(f"/api/v1/customers/{instrument_customer_id}")
     assert response.status_code == 204
     with Session(
         bind=db_connection, join_transaction_mode="create_savepoint"

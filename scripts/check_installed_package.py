@@ -23,26 +23,30 @@ def main() -> None:
     from fastapi.testclient import TestClient
 
     from atelier_api.main import app
+    from atelier_api.version import software_version
 
     routes = set(app.openapi()["paths"])
     assert {
-        "/auth/login",
-        "/auth/logout",
-        "/auth/me",
-        "/customers",
-        "/customers/{customer_id}",
-        "/customers/{customer_id}/instruments",
+        "/api/v1/auth/login",
+        "/api/v1/auth/logout",
+        "/api/v1/auth/me",
+        "/api/v1/customers",
+        "/api/v1/customers/{customer_id}",
+        "/api/v1/customers/{customer_id}/instruments",
         "/health/live",
         "/health/ready",
-        "/instruments",
-        "/instruments/{instrument_id}",
+        "/api/v1/instruments",
+        "/api/v1/instruments/{instrument_id}",
     } <= routes
+    assert not {"/auth/login", "/customers", "/instruments"} & routes
+    assert app.openapi()["info"]["version"] == package.version
+    assert software_version() == package.version
     with TestClient(app) as client:
         response = client.get("/health/live")
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
-        assert client.get("/auth/me").status_code == 401
-        assert client.get("/instruments").status_code == 401
+        assert client.get("/api/v1/auth/me").status_code == 401
+        assert client.get("/api/v1/instruments").status_code == 401
 
     entrypoint = next(ep for ep in package.entry_points if ep.name == "atelier-api")
     assert callable(entrypoint.load())

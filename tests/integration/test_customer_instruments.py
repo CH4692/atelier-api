@@ -8,7 +8,7 @@ def instrument_owners(postgres_client):
     customers = []
     for name in ("Jon", "Maria"):
         response = postgres_client.post(
-            "/customers",
+            "/api/v1/customers",
             json={
                 "first_name": name,
                 "last_name": "Doe",
@@ -32,7 +32,7 @@ def test_customer_list_excludes_other_customers_and_unassigned_instruments(
         ("double_bass", None),
     ]:
         response = postgres_client.post(
-            "/instruments",
+            "/api/v1/instruments",
             json={
                 "type": instrument_type,
                 "customer_id": customer_id,
@@ -46,7 +46,9 @@ def test_customer_list_excludes_other_customers_and_unassigned_instruments(
         if customer_id is not None:
             expected[customer_id].append(response.json())
     for customer in instrument_owners:
-        response = postgres_client.get(f"/customers/{customer['id']}/instruments")
+        response = postgres_client.get(
+            f"/api/v1/customers/{customer['id']}/instruments"
+        )
         assert response.status_code == 200
         records = response.json()
         assert len(records) == len(expected[customer["id"]])
@@ -61,16 +63,16 @@ def test_existing_customer_without_instruments_returns_empty_list(
 ):
     first, second = instrument_owners
     response = postgres_client.post(
-        "/instruments", json={"type": "cello", "customer_id": second["id"]}
+        "/api/v1/instruments", json={"type": "cello", "customer_id": second["id"]}
     )
     assert response.status_code == 201
-    response = postgres_client.get(f"/customers/{first['id']}/instruments")
+    response = postgres_client.get(f"/api/v1/customers/{first['id']}/instruments")
     assert response.status_code == 200
     assert response.json() == []
 
 
 def test_unknown_customer_returns_404_from_postgresql(postgres_client):
-    response = postgres_client.get("/customers/999999/instruments")
+    response = postgres_client.get("/api/v1/customers/999999/instruments")
     assert response.status_code == 404
     assert response.json() == {"detail": "Customer not found"}
 
@@ -80,25 +82,28 @@ def test_customer_instrument_lists_follow_current_association(
 ):
     first, second = instrument_owners
     response = postgres_client.post(
-        "/instruments", json={"type": "violin", "customer_id": first["id"]}
+        "/api/v1/instruments", json={"type": "violin", "customer_id": first["id"]}
     )
     assert response.status_code == 201
     instrument = response.json()
-    first_path = f"/customers/{first['id']}/instruments"
-    second_path = f"/customers/{second['id']}/instruments"
+    first_path = f"/api/v1/customers/{first['id']}/instruments"
+    second_path = f"/api/v1/customers/{second['id']}/instruments"
     assert postgres_client.get(first_path).json() == [instrument]
     assert postgres_client.get(second_path).json() == []
     response = postgres_client.patch(
-        f"/instruments/{instrument['id']}", json={"customer_id": second["id"]}
+        f"/api/v1/instruments/{instrument['id']}", json={"customer_id": second["id"]}
     )
     assert response.status_code == 200
     reassigned = response.json()
     assert postgres_client.get(first_path).json() == []
     assert postgres_client.get(second_path).json() == [reassigned]
     response = postgres_client.patch(
-        f"/instruments/{instrument['id']}", json={"customer_id": None}
+        f"/api/v1/instruments/{instrument['id']}", json={"customer_id": None}
     )
     assert response.status_code == 200
     assert postgres_client.get(first_path).json() == []
     assert postgres_client.get(second_path).json() == []
-    assert postgres_client.get(f"/instruments/{instrument['id']}").status_code == 200
+    assert (
+        postgres_client.get(f"/api/v1/instruments/{instrument['id']}").status_code
+        == 200
+    )

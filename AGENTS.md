@@ -38,6 +38,8 @@
   semantics when improving documentation. Schema descriptions may be improved.
 - Share sessions through `atelier_api.database.SessionDep`. Keep business logic
   separate from HTTP handling when its complexity warrants a service.
+- These compatibility requirements apply unless the task explicitly authorizes a
+  corresponding API contract change.
 
 ## Database
 
@@ -67,6 +69,11 @@ Do not add public registration, JWT or session endpoints without an explicit tas
 
 ## Required quality checks
 
+Run targeted checks during implementation. The following commands define the complete
+repository quality suite and must pass before merging or releasing changes. For small,
+isolated tasks, avoid repeatedly running the entire suite locally when CI will execute
+it.
+
 Run from the repository root:
 
 ```bash
@@ -82,7 +89,7 @@ fixtures and need no running database. pytest loads the repository .env before
 application imports, preserving explicit environment variables such as CI settings.
 Local application and integration connections use Neon when configured there.
 Set TEST_DATABASE_URL in .env to a direct connection to a dedicated database ending
-in _test; the integration fixtures create and migrate a disposable schema. Only
+in \_test; the integration fixtures create and migrate a disposable schema. Only
 when DATABASE_URL is absent from both sources is an import-only SQLite URL used.
 Missing TEST_DATABASE_URL skips integration tests; an unreachable configured
 database fails rather than falling back to local PostgreSQL or SQLite.
@@ -100,3 +107,28 @@ and Google-section checks. Presence rules D100-D107 are intentionally not enable
 useful documentation is required by these conventions, not boilerplate everywhere.
 No broad `noqa` suppressions should be added. Report failed checks and distinguish
 pre-existing issues from regressions.
+
+## Agent workflow and efficiency
+
+- Read only the files relevant to the requested task before expanding the
+  investigation. Reuse established project conventions and utilities.
+
+- Keep changes scoped to the requested behavior. Avoid unrelated refactoring,
+  speculative improvements and unnecessary new dependencies.
+
+- For straightforward tasks, implement directly without producing a lengthy
+  implementation plan. For complex or security-sensitive tasks, briefly identify
+  the approach and relevant risks before editing.
+
+- Prefer targeted tests and checks during implementation. Run the complete
+  quality suite before finalizing substantial changes, and when explicitly
+  requested. Leave full repository validation to CI for small, isolated changes.
+
+- Do not repeatedly run unchanged checks after failures. Investigate the cause,
+  make a focused correction and rerun the affected check.
+
+- Do not perform additional review or refactoring passes unless needed to
+  satisfy the task or fix a demonstrated problem.
+
+- Keep the final response concise: summarize changes, tests and any remaining
+  risks or limitations.

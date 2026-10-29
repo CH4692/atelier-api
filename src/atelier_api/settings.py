@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     customer_portal_auth_enabled: bool = False
 
     @property
+    def api_documentation_enabled(self) -> bool:
+        """Expose interactive API documentation only during development."""
+        return self.environment == "development"
+
+    @property
     def session_cookie_name(self) -> str:
         """Keep production cookies host-bound and distinct from HTTP development."""
         return "__Host-session" if self.environment == "production" else "dev-session"

@@ -21,7 +21,7 @@ def instrument_session(mock_session) -> MagicMock:
 def test_register_instrument_without_customer(
     client, instrument_session, instrument_type
 ):
-    response = client.post("/instruments", json={"type": instrument_type.value})
+    response = client.post("/api/v1/instruments", json={"type": instrument_type.value})
     assert response.status_code == 201
     assert response.json() == {
         "id": 42,
@@ -52,7 +52,7 @@ def test_register_instrument_with_existing_customer(client, instrument_session):
         "notes": "Repaired top.",
         "customer_id": 7,
     }
-    response = client.post("/instruments", json=payload)
+    response = client.post("/api/v1/instruments", json=payload)
     assert response.status_code == 201
     assert response.json() == {**payload, "id": 42}
     instrument_session.get.assert_called_once_with(Customer, 7)
@@ -62,7 +62,9 @@ def test_register_instrument_with_existing_customer(client, instrument_session):
 
 
 def test_register_instrument_with_explicit_null_customer(client, instrument_session):
-    response = client.post("/instruments", json={"type": "viola", "customer_id": None})
+    response = client.post(
+        "/api/v1/instruments", json={"type": "viola", "customer_id": None}
+    )
     assert response.status_code == 201
     assert response.json()["customer_id"] is None
     instrument_session.get.assert_not_called()
@@ -71,7 +73,7 @@ def test_register_instrument_with_explicit_null_customer(client, instrument_sess
 def test_register_instrument_rejects_unknown_customer(client, mock_session):
     mock_session.get.return_value = None
     response = client.post(
-        "/instruments", json={"type": "cello", "customer_id": 999999}
+        "/api/v1/instruments", json={"type": "cello", "customer_id": 999999}
     )
     assert response.status_code == 404
     assert response.json() == {"detail": "Customer not found"}
@@ -94,7 +96,7 @@ def test_register_instrument_rejects_unknown_customer(client, mock_session):
     ],
 )
 def test_register_instrument_rejects_invalid_input(client, mock_session, payload):
-    response = client.post("/instruments", json=payload)
+    response = client.post("/api/v1/instruments", json=payload)
     assert response.status_code == 422
     mock_session.get.assert_not_called()
     mock_session.add.assert_not_called()
@@ -104,7 +106,9 @@ def test_register_instrument_rejects_invalid_input(client, mock_session, payload
 @pytest.mark.parametrize("body", [b"", b"{invalid json"])
 def test_register_instrument_requires_valid_json_body(client, mock_session, body):
     response = client.post(
-        "/instruments", content=body, headers={"Content-Type": "application/json"}
+        "/api/v1/instruments",
+        content=body,
+        headers={"Content-Type": "application/json"},
     )
     assert response.status_code == 422
     mock_session.add.assert_not_called()
@@ -112,7 +116,7 @@ def test_register_instrument_requires_valid_json_body(client, mock_session, body
 
 
 def test_register_instrument_is_documented_in_openapi():
-    operation = app.openapi()["paths"]["/instruments"]["post"]
+    operation = app.openapi()["paths"]["/api/v1/instruments"]["post"]
     assert operation["requestBody"]["required"] is True
     assert {"201", "404", "422", "503"} <= operation["responses"].keys()
     assert operation["requestBody"]["content"]["application/json"]["schema"][
@@ -136,7 +140,7 @@ def test_list_instruments_returns_schema_fields(client, mock_session):
         ),
         Instrument(id=2, type=InstrumentType.CELLO),
     ]
-    response = client.get("/instruments")
+    response = client.get("/api/v1/instruments")
     assert response.status_code == 200
     assert response.json() == [
         {
@@ -164,14 +168,14 @@ def test_list_instruments_returns_schema_fields(client, mock_session):
 
 def test_list_instruments_accepts_empty_list(client, mock_session):
     mock_session.exec.return_value.all.return_value = []
-    response = client.get("/instruments")
+    response = client.get("/api/v1/instruments")
     assert response.status_code == 200
     assert response.json() == []
     mock_session.commit.assert_not_called()
 
 
 def test_list_instruments_is_documented_as_array_in_openapi():
-    operation = app.openapi()["paths"]["/instruments"]["get"]
+    operation = app.openapi()["paths"]["/api/v1/instruments"]["get"]
     assert operation["summary"] == "List registered instruments"
     assert operation["tags"] == ["instruments"]
     schema = operation["responses"]["200"]["content"]["application/json"]["schema"]
@@ -193,7 +197,7 @@ def test_get_instrument_returns_details_and_customer_id(
         notes="Repaired top.",
         customer_id=customer_id,
     )
-    response = client.get("/instruments/42")
+    response = client.get("/api/v1/instruments/42")
     assert response.status_code == 200
     assert response.json() == {
         "id": 42,
@@ -211,7 +215,7 @@ def test_get_instrument_returns_details_and_customer_id(
 @pytest.mark.parametrize("instrument_id", [0, -1, 999999])
 def test_get_unknown_instrument_returns_404(client, mock_session, instrument_id):
     mock_session.get.return_value = None
-    response = client.get(f"/instruments/{instrument_id}")
+    response = client.get(f"/api/v1/instruments/{instrument_id}")
     assert response.status_code == 404
     assert response.json() == {"detail": "Instrument not found"}
     mock_session.get.assert_called_once_with(Instrument, instrument_id)
@@ -219,13 +223,13 @@ def test_get_unknown_instrument_returns_404(client, mock_session, instrument_id)
 
 
 def test_get_instrument_rejects_invalid_id(client, mock_session):
-    response = client.get("/instruments/invalid")
+    response = client.get("/api/v1/instruments/invalid")
     assert response.status_code == 422
     mock_session.get.assert_not_called()
 
 
 def test_get_instrument_is_documented_in_openapi():
-    operation = app.openapi()["paths"]["/instruments/{instrument_id}"]["get"]
+    operation = app.openapi()["paths"]["/api/v1/instruments/{instrument_id}"]["get"]
     assert {"200", "404", "422", "503"} <= operation["responses"].keys()
     schema = operation["responses"]["200"]["content"]["application/json"]["schema"]
     assert schema["$ref"].endswith("/InstrumentRead")
@@ -260,7 +264,7 @@ def test_update_instrument_changes_details(
         "identification_number": "LABEL-43",
         "notes": "Updated notes.",
     }
-    response = client.patch("/instruments/42", json=payload)
+    response = client.patch("/api/v1/instruments/42", json=payload)
     assert response.status_code == 200
     assert response.json() == {"id": 42, "customer_id": 7, **payload}
     mock_session.get.assert_called_once_with(Instrument, 42)
@@ -273,7 +277,7 @@ def test_update_instrument_preserves_omitted_fields(
     client, mock_session, update_instrument_target
 ):
     before = update_instrument_target.model_dump(mode="json")
-    response = client.patch("/instruments/42", json={"notes": "Changed notes."})
+    response = client.patch("/api/v1/instruments/42", json={"notes": "Changed notes."})
     assert response.status_code == 200
     assert response.json() == {**before, "notes": "Changed notes."}
     mock_session.get.assert_called_once_with(Instrument, 42)
@@ -286,7 +290,7 @@ def test_update_instrument_changes_customer(
         id=8, first_name="Maria", last_name="Doe", email="maria@example.com"
     )
     mock_session.get.side_effect = [update_instrument_target, customer]
-    response = client.patch("/instruments/42", json={"customer_id": 8})
+    response = client.patch("/api/v1/instruments/42", json={"customer_id": 8})
     assert response.status_code == 200
     assert response.json()["customer_id"] == 8
     assert mock_session.get.call_args_list[0].args == (Instrument, 42)
@@ -307,7 +311,7 @@ def test_update_instrument_clears_optional_fields(
             "customer_id",
         )
     }
-    response = client.patch("/instruments/42", json=payload)
+    response = client.patch("/api/v1/instruments/42", json=payload)
     assert response.status_code == 200
     assert response.json() == {"id": 42, "type": "violin", **payload}
     mock_session.get.assert_called_once_with(Instrument, 42)
@@ -318,7 +322,7 @@ def test_update_instrument_empty_body_is_noop(
     client, mock_session, update_instrument_target
 ):
     before = update_instrument_target.model_dump(mode="json")
-    response = client.patch("/instruments/42", json={})
+    response = client.patch("/api/v1/instruments/42", json={})
     assert response.status_code == 200
     assert response.json() == before
     mock_session.add.assert_not_called()
@@ -327,7 +331,9 @@ def test_update_instrument_empty_body_is_noop(
 
 def test_update_unknown_instrument_returns_404(client, mock_session):
     mock_session.get.return_value = None
-    response = client.patch("/instruments/999999", json={"notes": "Changed notes."})
+    response = client.patch(
+        "/api/v1/instruments/999999", json={"notes": "Changed notes."}
+    )
     assert response.status_code == 404
     assert response.json() == {"detail": "Instrument not found"}
     mock_session.add.assert_not_called()
@@ -340,7 +346,8 @@ def test_update_instrument_rejects_unknown_customer_before_mutating_record(
     before = update_instrument_target.model_dump(mode="json")
     mock_session.get.side_effect = [update_instrument_target, None]
     response = client.patch(
-        "/instruments/42", json={"customer_id": 999999, "notes": "Changed notes."}
+        "/api/v1/instruments/42",
+        json={"customer_id": 999999, "notes": "Changed notes."},
     )
     assert response.status_code == 404
     assert response.json() == {"detail": "Customer not found"}
@@ -367,26 +374,28 @@ def test_update_instrument_rejects_unknown_customer_before_mutating_record(
     ],
 )
 def test_update_instrument_rejects_invalid_input(client, mock_session, payload):
-    response = client.patch("/instruments/42", json=payload)
+    response = client.patch("/api/v1/instruments/42", json=payload)
     assert response.status_code == 422
     mock_session.get.assert_not_called()
     mock_session.commit.assert_not_called()
 
 
 def test_update_instrument_rejects_invalid_id(client, mock_session):
-    response = client.patch("/instruments/invalid", json={"notes": "Changed notes."})
+    response = client.patch(
+        "/api/v1/instruments/invalid", json={"notes": "Changed notes."}
+    )
     assert response.status_code == 422
     mock_session.get.assert_not_called()
 
 
 def test_update_instrument_requires_body(client, mock_session):
-    response = client.patch("/instruments/42")
+    response = client.patch("/api/v1/instruments/42")
     assert response.status_code == 422
     mock_session.commit.assert_not_called()
 
 
 def test_update_instrument_is_documented_in_openapi():
-    operation = app.openapi()["paths"]["/instruments/{instrument_id}"]["patch"]
+    operation = app.openapi()["paths"]["/api/v1/instruments/{instrument_id}"]["patch"]
     assert {"200", "404", "422", "503"} <= operation["responses"].keys()
     assert operation["requestBody"]["required"] is True
     assert operation["requestBody"]["content"]["application/json"]["schema"][
@@ -400,7 +409,7 @@ def test_update_instrument_is_documented_in_openapi():
 def test_delete_instrument_returns_empty_204(
     client, mock_session, update_instrument_target
 ):
-    response = client.delete("/instruments/42")
+    response = client.delete("/api/v1/instruments/42")
     assert response.status_code == 204
     assert response.content == b""
     mock_session.get.assert_called_once_with(Instrument, 42)
@@ -411,7 +420,7 @@ def test_delete_instrument_returns_empty_204(
 @pytest.mark.parametrize("instrument_id", [0, -1, 999999])
 def test_delete_unknown_instrument_returns_404(client, mock_session, instrument_id):
     mock_session.get.return_value = None
-    response = client.delete(f"/instruments/{instrument_id}")
+    response = client.delete(f"/api/v1/instruments/{instrument_id}")
     assert response.status_code == 404
     assert response.json() == {"detail": "Instrument not found"}
     mock_session.delete.assert_not_called()
@@ -419,7 +428,7 @@ def test_delete_unknown_instrument_returns_404(client, mock_session, instrument_
 
 
 def test_delete_instrument_rejects_invalid_id(client, mock_session):
-    response = client.delete("/instruments/invalid")
+    response = client.delete("/api/v1/instruments/invalid")
     assert response.status_code == 422
     mock_session.get.assert_not_called()
     mock_session.delete.assert_not_called()
@@ -427,7 +436,7 @@ def test_delete_instrument_rejects_invalid_id(client, mock_session):
 
 
 def test_delete_instrument_is_documented_in_openapi():
-    operation = app.openapi()["paths"]["/instruments/{instrument_id}"]["delete"]
+    operation = app.openapi()["paths"]["/api/v1/instruments/{instrument_id}"]["delete"]
     assert {"204", "404", "422", "503"} <= operation["responses"].keys()
     assert "content" not in operation["responses"]["204"]
     assert "requestBody" not in operation
