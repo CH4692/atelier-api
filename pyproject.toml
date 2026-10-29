@@ -12,6 +12,7 @@ dependencies = [
     "fastapi[standard]>=0.143.1",
     "psycopg2>=2.9.13",
     "psycopg[binary]>=3.3.6",
+    "pwdlib[argon2]>=0.3.1",
     "pydantic-settings>=2.16.0",
     "pytest>=9.1.1",
     "sqlmodel>=0.0.48",
@@ -22,6 +23,7 @@ entrypoint = "atelier_api.main:app"
 
 [project.scripts]
 atelier-api = "atelier_api.cli:main"
+atelier-users = "atelier_api.users.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.13.1,<0.14.0"]

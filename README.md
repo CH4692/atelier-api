@@ -159,6 +159,69 @@ curl --fail-with-body -X POST http://127.0.0.1:8000/instruments \
 `customer_id` muss auf einen bereits vorhandenen Kunden verweisen. Für Werkstattbestand kann das Feld entfallen oder `null` sein. Ein unbekannter Kunde ergibt HTTP 404 mit `Customer not found`; ungültige Felder, fehlender Typ oder eine ungültige Kunden-ID wie `0` ergeben HTTP 422. Bei Erfolg wird der Datensatz vor der Antwort gespeichert und mit HTTP 201 einschließlich automatisch vergebener `id` und aller optionalen Felder zurückgegeben. Es wird kein Kunde automatisch angelegt. Request- und Antwortschema sowie Fehlerantworten sind unter `/docs` dokumentiert.
 
 
+### Anwendungsbenutzer und autorisierte Verwaltung
+
+`atelier_api.users` enthält ein persistentes, von Werkstattkunden getrenntes Kontenmodell. Es gibt keine öffentliche Registrierung und keine Benutzer-HTTP-Endpunkte.
+
+| Feld in `app_user` | Verhalten |
+| --- | --- |
+| `id` | Automatisch erzeugter Integer-Primärschlüssel |
+| `email` | Validierte, anwendungsseitig kleingeschriebene E-Mail; eindeutiger Datenbankindex auf `lower(email)` |
+| `hashed_password` | Argon2id-Hash; kein Klartextpasswort |
+| `is_active` | Aktivierungsstatus, standardmäßig `true` |
+| `role` | `admin`, `employee` oder `customer`; Standard `employee` |
+| `customer_id` | Optionale, eindeutige Fremdschlüsselreferenz auf `customer.id` |
+| `created_at`, `updated_at` | Zeitzonenbewusste `TIMESTAMPTZ`-Werte, Ausgabe in UTC |
+| `auth_version` | Interner Versionszähler zur Invalidierung alter authentifizierter Identitäten |
+
+Die Rollen werden als `UserRole.ADMIN`, `UserRole.EMPLOYEE` und `UserRole.CUSTOMER` definiert und in der Datenbank durch einen Check-Constraint begrenzt. `UserCreate` akzeptiert weder Rolle noch Kundenzuordnung. Nur eine autorisierte Administratoroperation kann diese Werte ausdrücklich setzen. Auch Administratoren dürfen ihre eigene Rolle nicht ändern.
+
+Passwörter werden mit `pwdlib[argon2]` und Argon2id gehasht, entsprechend der [FastAPI-Dokumentation](https://fastapi.tiangolo.com/tutorial/security/oauth2-jwt/). Jeder Hash hat einen zufälligen Salt. Die Verifikation verwendet die Bibliothek und liest die Parameter aus dem gespeicherten Hash; ältere Argon2-Parameter bleiben verifizierbar. `UserCreate` akzeptiert 12 bis 1024 Zeichen als `SecretStr`, ohne Trimmen oder Abschneiden. `UserRead`, Tabellenmodell-Serialisierung und Repräsentation geben weder Passwort noch Hash aus. Validierungsfehler verbergen Eingaben und der gemeinsame Datenbank-Engine verbirgt SQL-Parameter in Logs und Exceptions.
+
+#### Erstadministrator und weitere Konten
+
+Vorher Migrationen anwenden:
+
+```bash
+make db-migrate
+make db-check
+uv run atelier-users bootstrap --email owner@example.com
+```
+
+Der Bootstrap verlangt ein interaktives Terminal und fragt das neue Passwort zweimal verdeckt ab. Es gibt keine Passwort-Argumente, hartcodierten Zugangsdaten oder automatisch angelegte Standardkonten. Der Befehl ist ein expliziter lokaler Betreiberprozess mit Datenbankzugriff. Eine gesperrte Singleton-Zeile in `user_provisioning_state` schützt vor parallelem Bootstrap und hält die einmalige Freigabe dauerhaft geschlossen, auch wenn Konten später gelöscht werden. Existierende Administratoren verhindern ebenfalls einen erneuten Bootstrap.
+
+Alle weiteren CLI-Befehle prüfen E-Mail und Passwort eines aktiven Administrators. Neue interne Benutzer bekommen ohne explizite Rollenangabe `employee`:
+
+```bash
+uv run atelier-users create --admin-email owner@example.com --email employee@example.com
+uv run atelier-users create --admin-email owner@example.com --email second-admin@example.com --role admin
+uv run atelier-users deactivate 2 --admin-email owner@example.com
+uv run atelier-users activate 2 --admin-email owner@example.com
+uv run atelier-users set-role 2 employee --admin-email owner@example.com
+uv run atelier-users associate 2 --customer-id 1 --admin-email owner@example.com
+uv run atelier-users associate 2 --clear --admin-email owner@example.com
+```
+
+Der Service verlangt bei jeder Verwaltungsoperation eine frisch geprüfte Administratoridentität. Rollen werden aus dem aktuellen Datenbankdatensatz gelesen. Die letzte aktive Administratorperson kann weder deaktiviert, herabgestuft noch gelöscht werden. Verwaltungsoperationen sperren die gemeinsame Zustandszeile, damit parallele Änderungen diese Regel nicht umgehen. Zusätzlich schützt ein Datenbanktrigger den letzten aktiven Administrator bei direkten Updates und Löschungen.
+
+#### Kundenbeziehung und Portalrolle
+
+Kunden können ohne Benutzerkonto bestehen. Eine gleiche E-Mail erzeugt keine Zuordnung. Administratoren können eine vorhandene Kunden-ID ausdrücklich zuordnen oder entfernen; Fremdschlüssel und Unique-Constraint erlauben zunächst höchstens ein Konto pro Kunde. Weitere Konten ohne Kundenzuordnung bleiben möglich. Beim Löschen eines Kunden wird die Referenz aufgehoben; beim Löschen oder Deaktivieren eines Kontos bleiben Kunden und Instrumente erhalten.
+
+`customer` ist eine vorbereitete Datenmodellrolle. Auch aktive und korrekt zugeordnete Konten dieser Rolle können sich nicht an der internen Werkstattanwendung authentifizieren. Portalzugang, Einladungen und deren Aktivierung werden durch dieses Ticket nicht bereitgestellt; eine gültige Kundenbeziehung allein aktiviert keinen Portalzugang.
+
+#### Authentifizierung und spätere Sitzungsintegration
+
+`users.authentication.authenticate_user` verifiziert Passwort und aktuellen Kontostatus und liefert für aktive interne Konten eine `UserIdentity(user_id, auth_version)`. Sie erstellt keinen Token und keine Sitzung. Inaktive Konten, falsche Passwörter und Portalrollen werden abgewiesen.
+
+Ein zukünftiger vertrauenswürdiger Sitzungsadapter muss die Herkunft seiner Sitzungsdaten prüfen und vor jeder geschützten Aktion `require_active_user(identity, session)` aufrufen. `UserIdentity` darf niemals ungeprüft aus Client-JSON übernommen werden. Die Verwaltungsservices führen diese Live-Prüfung bereits selbst aus.
+
+Ein Datenbanktrigger erhöht `auth_version` bei Deaktivierung sowie Rollen-, Passwort- oder Zuordnungsänderungen. Damit werden alle älteren Identitäten gleichzeitig ungültig. Reaktivierung setzt den Zähler nicht zurück; alte Identitäten bleiben gesperrt und nur eine erneute Passwortprüfung liefert eine gültige Identität. Derselbe Trigger aktualisiert `updated_at` und erhält `created_at`.
+
+**Umfangsgrenze:** Login-/Logout-Endpunkte, Session-Store, Cookies, JWT, Passwort-Reset und MFA sind nicht implementiert. Die Kriterien zu bestehenden Sitzungen sind hier als Widerrufs- und Prüfvertrag vorbereitet; eine automatische Abmeldung in HTTP-Anfragen benötigt die ausdrücklich ausgeklammerte Sitzungsintegration. Die bestehenden Kunden- und Instrument-Endpunkte werden noch nicht durch Authentifizierungs-Middleware geschützt.
+
+Die neue Migration `c91e4a702b68` baut auf `b75d90ae3214` auf. Bestehende Konten erhalten die Rolle `employee`; fehlende Zeitstempel werden mit dem Migrationszeitpunkt belegt. Kunden und Instrumente werden nicht verändert. Ein Downgrade der Erweiterung erhält E-Mail, Hash und Aktivierungsstatus, entfernt aber Rollen, Zeitstempel, Kundenzuordnungen, Widerrufsversionen und Bootstrap-Zustand. Dafür ist ein Wartungsfenster mit Invalidierung externer Sitzungen notwendig. Ein weiterer Downgrade der Basisrevision entfernt die Kontentabelle.
+
 **Wichtige offene Befunde der Bestandsaufnahme:**
 
 - **Hoch:** Authentifizierung und Autorisierung fehlen; keine echten Kundendaten in einer öffentlich erreichbaren Instanz verwenden.
@@ -280,6 +343,7 @@ src/atelier_api/
 ├── database.py       # Engine und Session pro Anfrage
 ├── customers/        # Kunden-Router, API-Schemas und Tabellenmodell
 ├── instruments/      # Instrument-Router, Tabellenmodell und Schemas
+├── users/            # Benutzer, Passwort-Hashing und Aktivierungsservice
 └── health/           # Liveness und Datenbank-Readiness
 alembic/              # Migrationskonfiguration und versionierte Schemaänderungen
 tests/                # API- und Schema-Tests
@@ -647,6 +711,6 @@ Die Produktideen aus anderen Lösungen dienen als **Orientierung**. Fremde Texte
 ---
 
 **Lizenz:** MIT (laut bestehendem Projekt).  
-**Stand dieser README:** 28. Oktober 2026.
+**Stand dieser README:** 29. Oktober 2026.
 
 **Hinweis:** Fachliche Anforderungen sind ein Arbeitsstand und müssen im Pilot mit Herrn Lampe validiert werden.

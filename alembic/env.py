@@ -13,6 +13,7 @@ from alembic import context
 from atelier_api.customers.models import Customer  # noqa: F401
 from atelier_api.instruments.models import Instrument  # noqa: F401
 from atelier_api.settings import settings
+from atelier_api.users.models import User  # noqa: F401
 
 config = context.config
 

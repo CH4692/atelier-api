@@ -76,6 +76,15 @@ def db_connection(postgres_engine):
     with postgres_engine.connect() as connection:
         assert connection.scalar(text("SELECT count(*) FROM customer")) == 0
         assert connection.scalar(text("SELECT count(*) FROM instrument")) == 0
+        assert connection.scalar(text("SELECT count(*) FROM app_user")) == 0
+        assert (
+            connection.scalar(
+                text(
+                    "SELECT bootstrap_completed FROM user_provisioning_state WHERE id=1"
+                )
+            )
+            is False
+        )
 
 
 @pytest.fixture
