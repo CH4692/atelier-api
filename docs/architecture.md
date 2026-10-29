@@ -18,7 +18,8 @@ src/atelier_api/
 │   └── schemas.py            # API-Eingaben und -Ausgaben
 ├── instruments/
 │   ├── __init__.py
-│   ├── router.py             # Instrumente registrieren und auflisten
+│   ├── router.py             # Instrument-CRUD
+│   ├── customer_router.py    # Instrumente eines Kunden lesen
 │   ├── models.py             # Instrumenttabelle und optionale Kundenbeziehung
 │   └── schemas.py            # Instrumenttyp und validierte Ein-/Ausgaben
 └── health/
@@ -86,6 +87,12 @@ Features rufen keine HTTP-Handler anderer Features auf. Eine benötigte fachübe
 ## Bestehende Instrumentbeziehung
 
 `instruments.models.Instrument` referenziert `customers.models.Customer` über einen optionalen Fremdschlüssel. Die Abhängigkeit ist gerichtet: `customers` importiert `instruments` nicht. Das Modell stellt die ORM-Beziehung `Instrument.customer` bereit. Beim Löschen eines Kunden erhält `ON DELETE SET NULL` die Instrumentdaten und hebt nur die Zuordnung auf. Der in `main.py` registrierte Instrument-Router bietet `POST /instruments`, `GET /instruments`, `GET /instruments/{instrument_id}`, `PATCH /instruments/{instrument_id}` und `DELETE /instruments/{instrument_id}` an. Das Löschen eines Instruments liefert HTTP 204 und erhält den zugeordneten Kunden sowie andere Instrumente. Updates verwenden `InstrumentUpdate` und erhalten ausgelassene Felder; neue Kundenzuordnungen werden vor jeder Änderung geprüft. Der Einzelabruf verwendet `InstrumentRead` einschließlich optionaler `customer_id` und meldet unbekannte Instrumente mit HTTP 404. Die Liste verwendet `list[InstrumentRead]` und liefert bei leerer Tabelle `[]`. Er prüft einen optional angegebenen Kunden vor dem Speichern; unbekannte Kunden ergeben HTTP 404, ungültige Eingaben HTTP 422.
+
+### Kundeninstrumente als Unterressource
+
+`GET /customers/{customer_id}/instruments` verwendet die Kunden-ID als Kontext für die Instrumentliste. Ein unbekannter Kunde liefert 404, ein bekannter Kunde ohne Instrumente eine leere Liste. Die Datenbankabfrage filtert nach `Instrument.customer_id`; sie lädt nicht erst alle Instrumente zur anschließenden Filterung in Python.
+
+Der Router liegt als `instruments/customer_router.py` beim Feature, das die Instrumentdaten besitzt. `main.py` registriert `customer_instruments_router` separat mit Präfix `/customers` und Tag `customers`. So bleibt die Abhängigkeit `instruments → customers` gerichtet; `customers` muss keine Instrumentmodelle oder -Router importieren. Der URL-Pfad beschreibt die Ressourcenbeziehung, nicht den Ablageort im Python-Paket. Die Antwort verwendet `list[InstrumentRead]` und zeigt aktuelle Zuordnungen, keine historische Eigentümerfolge.
 
 ## Neues Feature ergänzen
 

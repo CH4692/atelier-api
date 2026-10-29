@@ -28,6 +28,7 @@ def main() -> None:
     assert {
         "/customers",
         "/customers/{customer_id}",
+        "/customers/{customer_id}/instruments",
         "/health/live",
         "/health/ready",
         "/instruments",
