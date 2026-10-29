@@ -37,6 +37,7 @@ Aktuell sind folgende Endpunkte implementiert:
 | `GET`   | `/health/ready`            | Prüft die Datenbankverbindung                         |
 | `GET`   | `/customers`               | Gibt derzeit alle Kunden ohne Pagination zurück       |
 | `GET`   | `/customers/{customer_id}` | Gibt einen Kunden zurück; `404` falls nicht vorhanden |
+| `GET` | `/customers/{customer_id}/instruments` | Liefert nur die aktuell zugeordneten Instrumente; `200` oder bei unbekanntem Kunden `404` |
 | `POST`  | `/customers`               | Legt einen Kunden an; `201` bei Erfolg                |
 | `PATCH` | `/customers/{customer_id}` | Ändert angegebene Kundendaten; `200`, bei unbekannter ID `404` |
 | `DELETE` | `/customers/{customer_id}` | Löscht einen Kunden dauerhaft; `204` ohne Inhalt, bei unbekannter ID `404` |
@@ -94,6 +95,16 @@ make db-check
 ```
 
 Ein Downgrade dieser Revision entfernt die Instrumenttabelle einschließlich ihrer Daten; die Kundentabelle bleibt erhalten.
+
+### Instrumente eines Kunden anzeigen
+
+`GET /customers/{customer_id}/instruments` liefert HTTP 200 und eine Liste nach `list[InstrumentRead]`. Die Abfrage prüft zuerst, ob der Kunde existiert, und filtert danach in PostgreSQL nach `instrument.customer_id`. Instrumente anderer Kunden und unzugeordnete Instrumente werden nicht zurückgegeben.
+
+```bash
+curl --fail-with-body http://127.0.0.1:8000/customers/1/instruments
+```
+
+Ein bestehender Kunde ohne Instrumente erhält `[]`; ein unbekannter Kunde erhält HTTP 404 mit `Customer not found`. Ein ungültiges ID-Format ergibt HTTP 422. Der Endpunkt erscheint unter `/docs` im Bereich `customers`. Die Liste bildet die **aktuelle Zuordnung** ab: Nach einem Kundenwechsel erscheint das Instrument beim neuen Kunden; nach Aufheben der Zuordnung bei keinem Kunden. Frühere Eigentümer oder Zuordnungen werden nicht historisiert. Es gibt noch keine Pagination oder festgelegte Sortierreihenfolge.
 
 ### Instrumente auflisten
 
@@ -529,7 +540,7 @@ Jeder Testlauf erzeugt ein Schema mit zufälligem Namen und wendet darin `alembi
 
 Jeder API-Aufruf erhält eine eigene Session mit Savepoint innerhalb einer äußeren Testtransaktion. Am Testende wird die äußere Transaktion zurückgerollt, auch wenn der Endpunkt `session.commit()` aufgerufen hat. Eine zusätzliche Prüfung bestätigt nach jedem Test, dass keine Kunden- oder Instrumentdaten zurückbleiben. Am Ende des Testlaufs wird ausschließlich das eigens erzeugte Schema entfernt. Die Suite ist für sequenzielle Ausführung eingerichtet.
 
-Die Tests unter `tests/instruments/` validieren Instrument-Schemas sowie die POST-, GET-, PATCH- und DELETE-Endpunkte einschließlich leerer Listen, Validierungsfehlern und unbekannten Kunden. `tests/integration/test_instrument_api.py` prüft Registrierung, Änderung und Löschung über HTTP, das erneute Lesen aus PostgreSQL über eine frische Session sowie den Erhalt anderer Instrumente und der Kundenakte nach einer Instrumentlöschung. `tests/integration/test_instruments.py` prüft die Speicherung aller Instrumentfelder, die Kundenzuordnung, mehrere Instrumente pro Kunde, ungültige Fremdschlüssel und Datenbankwerte sowie den Erhalt von Instrumenten beim Löschen eines Kunden. Nach jedem Test wird zusätzlich geprüft, dass keine Instrumentdaten zurückbleiben.
+Die Tests in `tests/instruments/test_customer_api.py` und `tests/integration/test_customer_instruments.py` prüfen die Kundeninstrumentliste, einschließlich Filterung nach Kunde, unzugeordneter Instrumente, leerer Ergebnisse, unbekannter Kunden und Zuordnungswechsel. Die übrigen Tests unter `tests/instruments/` validieren Instrument-Schemas sowie die POST-, GET-, PATCH- und DELETE-Endpunkte einschließlich leerer Listen, Validierungsfehlern und unbekannten Kunden. `tests/integration/test_instrument_api.py` prüft Registrierung, Änderung und Löschung über HTTP, das erneute Lesen aus PostgreSQL über eine frische Session sowie den Erhalt anderer Instrumente und der Kundenakte nach einer Instrumentlöschung. `tests/integration/test_instruments.py` prüft die Speicherung aller Instrumentfelder, die Kundenzuordnung, mehrere Instrumente pro Kunde, ungültige Fremdschlüssel und Datenbankwerte sowie den Erhalt von Instrumenten beim Löschen eines Kunden. Nach jedem Test wird zusätzlich geprüft, dass keine Instrumentdaten zurückbleiben.
 
 | Make-Befehl | Direkter Aufruf |
 | --- | --- |

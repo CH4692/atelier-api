@@ -7,7 +7,9 @@ from sqlalchemy.exc import InterfaceError, OperationalError, TimeoutError
 from atelier_api.main import app
 
 
-@pytest.mark.parametrize("path", ["/customers", "/instruments", "/instruments/1"])
+@pytest.mark.parametrize(
+    "path", ["/customers", "/instruments", "/instruments/1", "/customers/1/instruments"]
+)
 @pytest.mark.parametrize("error_type", [OperationalError, InterfaceError, TimeoutError])
 def test_database_failure_returns_503_without_credentials(error_type, path):
     error = (
