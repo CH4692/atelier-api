@@ -1,10 +1,13 @@
-.PHONY: dev test lint lint-fix format format-check typecheck db-migrate db-migration db-downgrade db-check
+.PHONY: dev test test-instruments lint lint-fix format format-check typecheck db-migrate db-migration db-downgrade db-check
 
 dev:
 	uv run fastapi dev
 
 test:
 	uv run pytest
+
+test-instruments:
+	uv run pytest tests/instruments tests/integration/test_instrument*.py tests/integration/test_customer_instruments.py
 
 lint:
 	uv run ruff check .
