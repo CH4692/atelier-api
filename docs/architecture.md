@@ -85,7 +85,7 @@ Features rufen keine HTTP-Handler anderer Features auf. Eine benötigte fachübe
 
 ## Bestehende Instrumentbeziehung
 
-`instruments.models.Instrument` referenziert `customers.models.Customer` über einen optionalen Fremdschlüssel. Die Abhängigkeit ist gerichtet: `customers` importiert `instruments` nicht. Das Modell stellt die ORM-Beziehung `Instrument.customer` bereit. Beim Löschen eines Kunden erhält `ON DELETE SET NULL` die Instrumentdaten und hebt nur die Zuordnung auf. Der in `main.py` registrierte Instrument-Router bietet `POST /instruments` und `GET /instruments` an. Die Liste verwendet `list[InstrumentRead]` und liefert bei leerer Tabelle `[]`. Er prüft einen optional angegebenen Kunden vor dem Speichern; unbekannte Kunden ergeben HTTP 404, ungültige Eingaben HTTP 422.
+`instruments.models.Instrument` referenziert `customers.models.Customer` über einen optionalen Fremdschlüssel. Die Abhängigkeit ist gerichtet: `customers` importiert `instruments` nicht. Das Modell stellt die ORM-Beziehung `Instrument.customer` bereit. Beim Löschen eines Kunden erhält `ON DELETE SET NULL` die Instrumentdaten und hebt nur die Zuordnung auf. Der in `main.py` registrierte Instrument-Router bietet `POST /instruments`, `GET /instruments` und `GET /instruments/{instrument_id}` an. Der Einzelabruf verwendet `InstrumentRead` einschließlich optionaler `customer_id` und meldet unbekannte Instrumente mit HTTP 404. Die Liste verwendet `list[InstrumentRead]` und liefert bei leerer Tabelle `[]`. Er prüft einen optional angegebenen Kunden vor dem Speichern; unbekannte Kunden ergeben HTTP 404, ungültige Eingaben HTTP 422.
 
 ## Neues Feature ergänzen
 
