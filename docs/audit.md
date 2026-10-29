@@ -27,8 +27,12 @@ werden ohne ihren Inhalt protokolliert.
 
 Kundenportal-Anmeldungen und abgewiesene Sessions benutzen dieselben Ereignisse;
 abgewiesene Werkstatt- und Audit-Zugriffe angemeldeter Konten werden ebenfalls
-erfasst. Es gibt keinen kundenseitigen Zugriff auf das interne Protokoll. Reine Lesezugriffe
-auf das Audit-Protokoll erzeugen derzeit kein weiteres Ereignis. Validierungsfehler,
+erfasst. Es gibt keinen kundenseitigen Zugriff auf das interne Protokoll. Erfolgreiche
+Audit-Abfragen erzeugen ein `audit.read`-Ereignis mit der Akteur-ID, ohne Filterwerte
+oder Antwortinhalte zu kopieren. Das Ereignis wird vor der Antwort committet und
+erscheint frühestens in einer nachfolgenden Abfrage. Auch leere Ergebnisse werden
+erfasst. API-Zeitstempel werden unabhängig von der Datenbank-Zeitzone in UTC
+ausgegeben. Validierungsfehler,
 404-Antworten und beliebige HTTP-Anfragen werden nicht pauschal protokolliert.
 
 Reparaturaufträge, Mietverträge, Vertragsabschluss und Rechnungen existieren noch

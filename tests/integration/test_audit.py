@@ -163,6 +163,25 @@ def test_admin_can_filter_and_paginate_without_exposing_account_data(
         assert client.get("/api/v1/audit-events", params=invalid).status_code == 422
 
 
+def test_successful_audit_reads_record_actor_without_query_contents(
+    auth_factory, db_connection, accounts
+):
+    client = auth_factory()
+    sign_in(client, "admin")
+    response = client.get("/api/v1/audit-events", params={"action": "audit.read"})
+    assert response.status_code == 200
+    assert response.json() == []
+    event = events(db_connection)[-1]
+    assert event.action == "audit.read"
+    assert event.actor_id == accounts["admin"]
+    assert event.resource_type == "audit"
+    assert event.resource_id is None
+    assert event.succeeded is True
+    assert event.details == {}
+    following = client.get("/api/v1/audit-events", params={"action": "audit.read"})
+    assert [item["id"] for item in following.json()] == [event.id]
+
+
 @pytest.mark.parametrize("role", ["admin", "employee", "customer"])
 def test_audit_has_no_ordinary_write_api(auth_factory, db_connection, role):
     client = auth_factory(customer_portal_auth_enabled=True)

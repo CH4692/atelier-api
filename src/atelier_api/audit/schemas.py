@@ -1,8 +1,8 @@
 """Expose only audit facts and explicitly allowed administrative change details."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
 from atelier_api.users.roles import UserRole
 
@@ -27,6 +27,12 @@ class AuditEventRead(BaseModel):
     resource_type: str
     resource_id: int | None
     actor_id: int | None
-    occurred_at: datetime
+    occurred_at: AwareDatetime
     succeeded: bool
     details: AuditDetails
+
+    @field_validator("occurred_at")
+    @classmethod
+    def normalize_timestamp(cls, value: datetime) -> datetime:
+        """Return UTC even when the database session uses another timezone."""
+        return value.astimezone(UTC)
