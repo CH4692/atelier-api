@@ -6,6 +6,64 @@ from atelier_api.customers.models import Customer
 pytestmark = pytest.mark.integration
 
 
+@pytest.fixture
+def searchable_customers(postgres_client):
+    records = []
+    for first, last, email, phone in (
+        ("Maria", "Mueller", "maria@example.com", "+49 176 123456"),
+        ("Jon", "Doe", "jon@example.org", None),
+        ("Marie", "Doe", "discount@example.com", "50%_off"),
+    ):
+        response = postgres_client.post(
+            "/api/v1/customers",
+            json={
+                "first_name": first,
+                "last_name": last,
+                "email": email,
+                "phone": phone,
+            },
+        )
+        assert response.status_code == 201
+        records.append(response.json())
+    return records
+
+
+@pytest.mark.parametrize(
+    "query,indices",
+    [
+        ("mAR", [0, 2]),
+        ("DOE", [1, 2]),
+        ("RIA@EXAMPLE", [0]),
+        ("176 123", [0]),
+        ("  MARIA MUELL  ", [0]),
+        ("not-found", []),
+        ("%", [2]),
+        ("_", [2]),
+        ("' OR 1=1 --", []),
+        ("   ", [0, 1, 2]),
+    ],
+)
+def test_search_customers(postgres_client, searchable_customers, query, indices):
+    response = postgres_client.get("/api/v1/customers", params={"q": query})
+    assert response.status_code == 200
+    assert response.json() == [searchable_customers[index] for index in indices]
+
+
+@pytest.mark.parametrize("query,indices", [(None, [0, 1, 2]), ("doe", [1, 2])])
+def test_search_customers_pagination(
+    postgres_client, searchable_customers, query, indices
+):
+    pages = []
+    for offset in range(len(indices) + 1):
+        params = {"offset": offset, "limit": 1}
+        if query is not None:
+            params["q"] = query
+        response = postgres_client.get("/api/v1/customers", params=params)
+        assert response.status_code == 200
+        pages.append(response.json())
+    assert pages == [[searchable_customers[index]] for index in indices] + [[]]
+
+
 @pytest.mark.parametrize("phone", [None, "+49176123456789"])
 def test_create_and_retrieve_customer(postgres_client, db_connection, phone):
     payload = {

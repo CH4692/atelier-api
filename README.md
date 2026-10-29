@@ -41,7 +41,7 @@ Health und die Anmeldemöglichkeit sind öffentlich.
 | `GET`   | `/`                        | Gibt „Hello World“ zurück                             |
 | `GET`   | `/health/live`             | Liveness-Prüfung                                      |
 | `GET`   | `/health/ready`            | Prüft die Datenbankverbindung                         |
-| `GET`   | `/api/v1/customers`               | Gibt derzeit alle Kunden ohne Pagination zurück       |
+| `GET`   | `/api/v1/customers`               | Sucht Kunden mit `q`, paginiert mit `offset` und `limit` |
 | `GET`   | `/api/v1/customers/{customer_id}` | Gibt einen Kunden zurück; `404` falls nicht vorhanden |
 | `GET` | `/api/v1/customers/{customer_id}/instruments` | Liefert nur die aktuell zugeordneten Instrumente; `200` oder bei unbekanntem Kunden `404` |
 | `POST`  | `/api/v1/customers`               | Legt einen Kunden an; `201` bei Erfolg                |
@@ -53,7 +53,17 @@ Health und die Anmeldemöglichkeit sind öffentlich.
 | `PATCH` | `/api/v1/instruments/{instrument_id}` | Ändert Instrumentdetails und Kundenzuordnung; `200`, bei unbekanntem Instrument oder Kunden `404` |
 | `DELETE` | `/api/v1/instruments/{instrument_id}` | Löscht ein Instrument dauerhaft; `204` ohne Inhalt, bei unbekannter ID `404` |
 
-**Aktuelles Kundenmodell:** numerische ID, Vorname, Nachname, E-Mail-Adresse und optionale Telefonnummer. Kundendaten können teilweise aktualisiert werden. Kunden können dauerhaft gelöscht werden. Suche, Filter und Pagination sind noch nicht implementiert.
+**Aktuelles Kundenmodell:** numerische ID, Vorname, Nachname, E-Mail-Adresse und optionale Telefonnummer. Kundendaten können teilweise aktualisiert werden. Kunden können dauerhaft gelöscht werden.
+
+`GET /api/v1/customers?q=maria&offset=0&limit=25` sucht nach Teiltreffern in
+Vorname, Nachname, vollständigem Namen (Vorname Nachname), E-Mail und Telefonnummer.
+Groß-/Kleinschreibung wird ignoriert; `%` und `_` werden wörtlich gesucht.
+Telefonnummern werden in ihrer gespeicherten Schreibweise durchsucht.
+Ohne `q` oder bei ausschließlich Leerzeichen werden alle Kunden paginiert
+aufgelistet. Ergebnisse sind nach ID aufsteigend sortiert; ohne Treffer folgt `[]`.
+`offset` beginnt bei 0, `limit` ist standardmäßig 100 (erlaubt: 1–200).
+Suchbegriffe sind auf 200 Zeichen begrenzt. Der bestehende Werkstatt-Zugriffsschutz
+gilt auch für die Suche.
 
 ### Kundendaten aktualisieren
 

@@ -1,7 +1,9 @@
 """Expose customer creation, retrieval, partial updates and deletion over HTTP."""
 
-from fastapi import APIRouter, HTTPException, Response, status
-from sqlmodel import select
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Query, Response, status
+from sqlmodel import col, or_, select
 
 from atelier_api.audit.models import AuditAction, AuditResource
 from atelier_api.audit.schemas import AuditDetails
@@ -23,9 +25,37 @@ customers_router = APIRouter(prefix="/customers")
     response_model=list[CustomerRead],
     responses={503: {"description": "Database unavailable"}},
 )
-async def get_customers(session: SessionDep) -> list[CustomerRead]:
-    """Return all customers without pagination or an explicit sort order."""
-    customers = session.exec(select(Customer)).all()
+async def get_customers(
+    session: SessionDep,
+    q: Annotated[str | None, Query(max_length=200)] = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+) -> list[CustomerRead]:
+    """Search names, email and phone using case-insensitive literal substrings.
+
+    Omitted or whitespace-only queries list customers. Results are ordered by ID
+    before applying offset and limit. SQL wildcard characters are treated as text.
+    Full names can be searched in first-name last-name order.
+    """
+    statement = select(Customer)
+    if q is not None and (term := q.strip()):
+        statement = statement.where(
+            or_(
+                *(
+                    column.icontains(term, autoescape=True)
+                    for column in (
+                        col(Customer.first_name),
+                        col(Customer.last_name),
+                        col(Customer.first_name) + " " + col(Customer.last_name),
+                        col(Customer.email),
+                        col(Customer.phone),
+                    )
+                )
+            )
+        )
+    customers = session.exec(
+        statement.order_by(col(Customer.id)).offset(offset).limit(limit)
+    ).all()
     return [CustomerRead.model_validate(customer) for customer in customers]
 
 
