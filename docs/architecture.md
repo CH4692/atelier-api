@@ -94,6 +94,16 @@ Features rufen keine HTTP-Handler anderer Features auf. Eine benötigte fachübe
 
 Der Router liegt als `instruments/customer_router.py` beim Feature, das die Instrumentdaten besitzt. `main.py` registriert `customer_instruments_router` separat mit Präfix `/customers` und Tag `customers`. So bleibt die Abhängigkeit `instruments → customers` gerichtet; `customers` muss keine Instrumentmodelle oder -Router importieren. Der URL-Pfad beschreibt die Ressourcenbeziehung, nicht den Ablageort im Python-Paket. Die Antwort verwendet `list[InstrumentRead]` und zeigt aktuelle Zuordnungen, keine historische Eigentümerfolge.
 
+## Anwendungsbenutzer
+
+Das Feature `users` trennt Tabellen (`models.py`), Eingaben/Ausgaben (`schemas.py`), Rollen (`roles.py`), Passwort-Hashing (`passwords.py`), Identitätsprüfung (`authentication.py`), autorisierte Verwaltungsoperationen (`service.py`) und lokale Betreiberkommandos (`cli.py`). Es gibt keinen öffentlichen Benutzer-Router.
+
+Die Services prüfen eine aktuelle aktive Administratoridentität und sperren die Singleton-Zeile `user_provisioning_state` vor Governance-Änderungen. Diese Zeile dient zugleich als permanente Bootstrap-Sperre. Der letzte aktive Administrator ist auf Service- und Trigger-Ebene vor Deaktivierung, Herabstufung und Löschung geschützt. Ein zweiter Administrator muss ausdrücklich provisioniert werden; Selbstrollenänderungen sind verboten.
+
+`auth_version` ist ein Widerrufszähler, kein Session-Store und kein Token. Sitzungsadapter müssen die Authentizität ihrer eigenen Sitzungsdaten gewährleisten und die Live-Prüfung `require_active_user` integrieren. Der Trigger erhöht die Version bei sicherheitsrelevanten Änderungen und hält UTC-Zeitstempel aktuell; Reaktivierung stellt alte Identitäten nicht wieder her.
+
+Kunden bleiben unabhängig von Benutzerkonten. Der optionale Fremdschlüssel und seine Eindeutigkeit bilden zunächst eine 1:1-Zuordnung ab. Kunden-E-Mail-Adressen lösen keine automatische Verknüpfung aus. Die Rolle `customer` berechtigt weder zur internen Anmeldung noch automatisch zu einem künftigen Portal.
+
 ## Neues Feature ergänzen
 
 1. Unterpaket in `src/atelier_api/<feature>/` mit den tatsächlich benötigten Dateien anlegen.

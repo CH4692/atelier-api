@@ -9,7 +9,7 @@ from sqlmodel import Session, create_engine
 
 from atelier_api.settings import settings
 
-engine = create_engine(settings.database_url, pool_pre_ping=True)
+engine = create_engine(settings.database_url, pool_pre_ping=True, hide_parameters=True)
 
 
 def get_session() -> Iterator[Session]:

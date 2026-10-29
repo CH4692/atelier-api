@@ -49,6 +49,13 @@
   excludes `alembic/versions/`; only docstring rules are exempted there, so existing
   non-documentation lint checks still apply.
 
+## User administration
+
+User administration must go through the authorized services in `users/service.py`.
+Treat `UserIdentity` as trusted adapter output, never unverified client input.
+Preserve the last-administrator guard, bootstrap latch and auth-version checks.
+Do not add public registration, JWT or session endpoints without an explicit task.
+
 ## Tests
 
 - Add or update tests when application behavior changes. Pure documentation edits
