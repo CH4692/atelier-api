@@ -57,3 +57,46 @@ def test_migration_creates_instrument_constraints_and_customer_reference(
         index["column_names"] == ["customer_id"]
         for index in inspector.get_indexes("instrument")
     )
+
+
+def test_migration_creates_secure_session_storage(postgres_engine):
+    inspector = inspect(postgres_engine)
+    assert {column["name"] for column in inspector.get_columns("user_session")} == {
+        "id",
+        "user_id",
+        "token_hash",
+        "auth_version",
+        "created_at",
+        "last_activity_at",
+        "expires_at",
+        "revoked_at",
+    }
+    assert {column["name"] for column in inspector.get_columns("login_rate_limit")} == {
+        "key_hash",
+        "attempts",
+        "window_started_at",
+    }
+    (foreign_key,) = inspector.get_foreign_keys("user_session")
+    assert foreign_key["referred_table"] == "app_user"
+    assert foreign_key["options"]["ondelete"] == "CASCADE"
+    assert any(
+        index["column_names"] == ["token_hash"] and index["unique"]
+        for index in inspector.get_indexes("user_session")
+    )
+    timezone_columns = {
+        column["name"]: column["type"].timezone
+        for column in inspector.get_columns("user_session")
+        if column["name"]
+        in {
+            "created_at",
+            "last_activity_at",
+            "expires_at",
+            "revoked_at",
+        }
+    }
+    assert timezone_columns == {
+        "created_at": True,
+        "last_activity_at": True,
+        "expires_at": True,
+        "revoked_at": True,
+    }

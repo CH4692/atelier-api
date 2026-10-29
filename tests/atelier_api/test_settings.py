@@ -58,3 +58,37 @@ def test_shared_dotenv_accepts_separate_test_url(monkeypatch, tmp_path):
     assert settings.database_url == "sqlite:///development.db"
     assert settings.test_database_url == "postgresql+psycopg://localhost/atelier_test"
     assert "atelier_test" not in repr(settings)
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"frontend_origins": ["*"]},
+        {"frontend_origins": []},
+        {"frontend_origins": ["https://app.example.test/"]},
+        {"frontend_origins": ["https://*.example.test"]},
+        {"frontend_origins": ["https://user:password-secret@app.example.test"]},
+        {"environment": "production"},
+        {"trusted_proxy_ips": ["*"]},
+        {"session_idle_seconds": 0},
+        {"session_absolute_seconds": 60},
+    ],
+)
+def test_invalid_security_settings_fail_closed(changes):
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, database_url="sqlite://", **changes)
+
+
+def test_production_cookies_cannot_be_downgraded():
+    config = Settings(
+        _env_file=None,
+        database_url="sqlite://",
+        environment="production",
+        frontend_origins=["https://app.example.test"],
+        trusted_proxy_ips=["127.0.0.1", "192.0.2.0/24"],
+    )
+    assert config.secure_cookies is True
+    assert config.session_cookie_name == "__Host-session"
+    development = Settings(_env_file=None, database_url="sqlite://")
+    assert development.session_cookie_name == "dev-session"
+    assert development.secure_cookies is False

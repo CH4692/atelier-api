@@ -12,6 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlmodel import Session, create_engine
 
+from atelier_api.auth.dependencies import require_internal_user
 from atelier_api.database import get_session
 from atelier_api.main import app
 
@@ -77,6 +78,8 @@ def db_connection(postgres_engine):
         assert connection.scalar(text("SELECT count(*) FROM customer")) == 0
         assert connection.scalar(text("SELECT count(*) FROM instrument")) == 0
         assert connection.scalar(text("SELECT count(*) FROM app_user")) == 0
+        assert connection.scalar(text("SELECT count(*) FROM user_session")) == 0
+        assert connection.scalar(text("SELECT count(*) FROM login_rate_limit")) == 0
         assert (
             connection.scalar(
                 text(
@@ -98,6 +101,7 @@ def postgres_client(db_connection):
 
     original_overrides = app.dependency_overrides.copy()
     app.dependency_overrides[get_session] = session_override
+    app.dependency_overrides[require_internal_user] = lambda: None
     try:
         with TestClient(app) as client:
             yield client
