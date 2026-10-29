@@ -44,6 +44,7 @@ Aktuell sind folgende Endpunkte implementiert:
 | `GET` | `/instruments` | Liefert alle registrierten Instrumente als Liste; `200`, auch bei leerer Liste |
 | `GET` | `/instruments/{instrument_id}` | Liefert Instrumentdetails mit optionaler Kunden-ID; `200`, bei unbekannter ID `404` |
 | `PATCH` | `/instruments/{instrument_id}` | Ändert Instrumentdetails und Kundenzuordnung; `200`, bei unbekanntem Instrument oder Kunden `404` |
+| `DELETE` | `/instruments/{instrument_id}` | Löscht ein Instrument dauerhaft; `204` ohne Inhalt, bei unbekannter ID `404` |
 
 **Aktuelles Kundenmodell:** numerische ID, Vorname, Nachname, E-Mail-Adresse und optionale Telefonnummer. Kundendaten können teilweise aktualisiert werden. Kunden können dauerhaft gelöscht werden. Suche, Filter und Pagination sind noch nicht implementiert.
 
@@ -125,6 +126,14 @@ curl --fail-with-body -X PATCH http://127.0.0.1:8000/instruments/1 \
 Nicht angegebene Felder bleiben erhalten. Eine bestehende Kunden-ID ändert die Zuordnung; `customer_id: null` entfernt sie. `maker`, `year_of_manufacture`, `identification_number` und `notes` können ebenfalls mit `null` geleert werden. `type` darf entfallen, aber nicht `null` oder ein unbekannter Instrumenttyp sein. Für Baujahr und Kunden-ID gelten dieselben Grenzen wie bei der Registrierung. Die ID selbst und unbekannte Felder sind nicht änderbar.
 
 Ein unbekanntes Instrument ergibt HTTP 404 mit `Instrument not found`. Ein unbekannter neuer Kunde ergibt HTTP 404 mit `Customer not found`; dabei werden auch andere übergebene Änderungen nicht gespeichert. Ungültige Eingaben ergeben HTTP 422. Ein leerer JSON-Body `{}` liefert das Instrument unverändert zurück, ohne einen Commit auszuführen. Der Endpunkt ist unter `/docs` dokumentiert.
+
+### Instrument löschen
+
+`DELETE /instruments/{instrument_id}` löscht ein Instrument dauerhaft und liefert nach erfolgreichem Commit HTTP 204 ohne Antwortinhalt. Die zugeordnete Kundenakte und andere Instrumente bleiben unverändert. Das gelöschte Instrument erscheint nicht mehr in `GET /instruments`; Einzelabruf und erneutes Löschen ergeben HTTP 404 mit `Instrument not found`. Ungültige ID-Formate ergeben HTTP 422. Der Endpunkt benötigt keinen Request-Body und ist unter `/docs` dokumentiert.
+
+```bash
+curl --fail-with-body -i -X DELETE http://127.0.0.1:8000/instruments/1
+```
 
 ### Instrument registrieren
 
@@ -520,7 +529,7 @@ Jeder Testlauf erzeugt ein Schema mit zufälligem Namen und wendet darin `alembi
 
 Jeder API-Aufruf erhält eine eigene Session mit Savepoint innerhalb einer äußeren Testtransaktion. Am Testende wird die äußere Transaktion zurückgerollt, auch wenn der Endpunkt `session.commit()` aufgerufen hat. Eine zusätzliche Prüfung bestätigt nach jedem Test, dass keine Kunden- oder Instrumentdaten zurückbleiben. Am Ende des Testlaufs wird ausschließlich das eigens erzeugte Schema entfernt. Die Suite ist für sequenzielle Ausführung eingerichtet.
 
-Die Tests unter `tests/instruments/` validieren Instrument-Schemas sowie die POST-, GET- und PATCH-Endpunkte einschließlich leerer Listen, Validierungsfehlern und unbekannten Kunden. `tests/integration/test_instrument_api.py` prüft die Registrierung über HTTP, das erneute Lesen aus PostgreSQL über eine frische Session und die Liste gespeicherter Instrumente. `tests/integration/test_instruments.py` prüft die Speicherung aller Instrumentfelder, die Kundenzuordnung, mehrere Instrumente pro Kunde, ungültige Fremdschlüssel und Datenbankwerte sowie den Erhalt von Instrumenten beim Löschen eines Kunden. Nach jedem Test wird zusätzlich geprüft, dass keine Instrumentdaten zurückbleiben.
+Die Tests unter `tests/instruments/` validieren Instrument-Schemas sowie die POST-, GET-, PATCH- und DELETE-Endpunkte einschließlich leerer Listen, Validierungsfehlern und unbekannten Kunden. `tests/integration/test_instrument_api.py` prüft Registrierung, Änderung und Löschung über HTTP, das erneute Lesen aus PostgreSQL über eine frische Session sowie den Erhalt anderer Instrumente und der Kundenakte nach einer Instrumentlöschung. `tests/integration/test_instruments.py` prüft die Speicherung aller Instrumentfelder, die Kundenzuordnung, mehrere Instrumente pro Kunde, ungültige Fremdschlüssel und Datenbankwerte sowie den Erhalt von Instrumenten beim Löschen eines Kunden. Nach jedem Test wird zusätzlich geprüft, dass keine Instrumentdaten zurückbleiben.
 
 | Make-Befehl | Direkter Aufruf |
 | --- | --- |
