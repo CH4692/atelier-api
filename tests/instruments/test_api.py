@@ -233,3 +233,165 @@ def test_get_instrument_is_documented_in_openapi():
     assert parameter["name"] == "instrument_id"
     assert parameter["in"] == "path"
     assert parameter["required"] is True
+
+
+@pytest.fixture
+def update_instrument_target(mock_session):
+    instrument = Instrument(
+        id=42,
+        type=InstrumentType.VIOLIN,
+        maker="Original maker",
+        year_of_manufacture=1920,
+        identification_number="LABEL-42",
+        notes="Original notes.",
+        customer_id=7,
+    )
+    mock_session.get.return_value = instrument
+    return instrument
+
+
+def test_update_instrument_changes_details(
+    client, mock_session, update_instrument_target
+):
+    payload = {
+        "type": "viola",
+        "maker": "Updated maker",
+        "year_of_manufacture": 1930,
+        "identification_number": "LABEL-43",
+        "notes": "Updated notes.",
+    }
+    response = client.patch("/instruments/42", json=payload)
+    assert response.status_code == 200
+    assert response.json() == {"id": 42, "customer_id": 7, **payload}
+    mock_session.get.assert_called_once_with(Instrument, 42)
+    mock_session.add.assert_called_once_with(update_instrument_target)
+    mock_session.commit.assert_called_once()
+    mock_session.refresh.assert_called_once_with(update_instrument_target)
+
+
+def test_update_instrument_preserves_omitted_fields(
+    client, mock_session, update_instrument_target
+):
+    before = update_instrument_target.model_dump(mode="json")
+    response = client.patch("/instruments/42", json={"notes": "Changed notes."})
+    assert response.status_code == 200
+    assert response.json() == {**before, "notes": "Changed notes."}
+    mock_session.get.assert_called_once_with(Instrument, 42)
+
+
+def test_update_instrument_changes_customer(
+    client, mock_session, update_instrument_target
+):
+    customer = Customer(
+        id=8, first_name="Maria", last_name="Doe", email="maria@example.com"
+    )
+    mock_session.get.side_effect = [update_instrument_target, customer]
+    response = client.patch("/instruments/42", json={"customer_id": 8})
+    assert response.status_code == 200
+    assert response.json()["customer_id"] == 8
+    assert mock_session.get.call_args_list[0].args == (Instrument, 42)
+    assert mock_session.get.call_args_list[1].args == (Customer, 8)
+    mock_session.commit.assert_called_once()
+
+
+def test_update_instrument_clears_optional_fields(
+    client, mock_session, update_instrument_target
+):
+    payload = {
+        name: None
+        for name in (
+            "maker",
+            "year_of_manufacture",
+            "identification_number",
+            "notes",
+            "customer_id",
+        )
+    }
+    response = client.patch("/instruments/42", json=payload)
+    assert response.status_code == 200
+    assert response.json() == {"id": 42, "type": "violin", **payload}
+    mock_session.get.assert_called_once_with(Instrument, 42)
+    mock_session.commit.assert_called_once()
+
+
+def test_update_instrument_empty_body_is_noop(
+    client, mock_session, update_instrument_target
+):
+    before = update_instrument_target.model_dump(mode="json")
+    response = client.patch("/instruments/42", json={})
+    assert response.status_code == 200
+    assert response.json() == before
+    mock_session.add.assert_not_called()
+    mock_session.commit.assert_not_called()
+
+
+def test_update_unknown_instrument_returns_404(client, mock_session):
+    mock_session.get.return_value = None
+    response = client.patch("/instruments/999999", json={"notes": "Changed notes."})
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Instrument not found"}
+    mock_session.add.assert_not_called()
+    mock_session.commit.assert_not_called()
+
+
+def test_update_instrument_rejects_unknown_customer_before_mutating_record(
+    client, mock_session, update_instrument_target
+):
+    before = update_instrument_target.model_dump(mode="json")
+    mock_session.get.side_effect = [update_instrument_target, None]
+    response = client.patch(
+        "/instruments/42", json={"customer_id": 999999, "notes": "Changed notes."}
+    )
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Customer not found"}
+    assert update_instrument_target.model_dump(mode="json") == before
+    mock_session.add.assert_not_called()
+    mock_session.commit.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"type": None},
+        {"type": "piano"},
+        {"year_of_manufacture": 0},
+        {"year_of_manufacture": 10000},
+        {"year_of_manufacture": "invalid"},
+        {"customer_id": 0},
+        {"customer_id": -1},
+        {"customer_id": "invalid"},
+        {"maker": 123},
+        {"notes": ["invalid"]},
+        {"id": 43},
+        {"unexpected": "value"},
+    ],
+)
+def test_update_instrument_rejects_invalid_input(client, mock_session, payload):
+    response = client.patch("/instruments/42", json=payload)
+    assert response.status_code == 422
+    mock_session.get.assert_not_called()
+    mock_session.commit.assert_not_called()
+
+
+def test_update_instrument_rejects_invalid_id(client, mock_session):
+    response = client.patch("/instruments/invalid", json={"notes": "Changed notes."})
+    assert response.status_code == 422
+    mock_session.get.assert_not_called()
+
+
+def test_update_instrument_requires_body(client, mock_session):
+    response = client.patch("/instruments/42")
+    assert response.status_code == 422
+    mock_session.commit.assert_not_called()
+
+
+def test_update_instrument_is_documented_in_openapi():
+    operation = app.openapi()["paths"]["/instruments/{instrument_id}"]["patch"]
+    assert {"200", "404", "422", "503"} <= operation["responses"].keys()
+    assert operation["requestBody"]["required"] is True
+    assert operation["requestBody"]["content"]["application/json"]["schema"][
+        "$ref"
+    ].endswith("/InstrumentUpdate")
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"][
+        "$ref"
+    ].endswith("/InstrumentRead")
