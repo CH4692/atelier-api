@@ -1,6 +1,9 @@
 # Changelog
 
-All released changes to Atelier API are documented here. This file is updated
-automatically from Conventional Commits by Python Semantic Release.
+Python Semantic Release generates this changelog from Conventional Commits in
+the release workspace. Each GitHub Release includes the generated file as an
+asset; tag-only releases do not commit updates to this file on main.
+
+Published history: https://github.com/CH4692/atelier-api/releases
 
 <!-- version list -->

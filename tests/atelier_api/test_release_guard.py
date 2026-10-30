@@ -9,7 +9,9 @@ from textwrap import dedent
 
 import pytest
 
-from scripts.check_release_guard import RELEASE_BOT, git, should_release
+from scripts.check_release_guard import git, should_release
+
+RELEASE_BOT = "atelier-release-bot[bot]"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY = "CH4692/atelier-api"
@@ -112,12 +114,12 @@ def test_missing_or_malformed_sha_fails_closed(repository, sha):
 @pytest.mark.parametrize(
     "actor,extra_file,expected",
     [
-        (RELEASE_BOT, "CHANGELOG.md", False),
+        (RELEASE_BOT, "CHANGELOG.md", True),
         (RELEASE_BOT, "code.py", True),
         ("owner", "CHANGELOG.md", True),
     ],
 )
-def test_only_bot_generated_metadata_commit_is_skipped(
+def test_commit_message_and_actor_do_not_suppress_tested_changes(
     repository, actor, extra_file, expected
 ):
     (repository / extra_file).write_text("changed\n")

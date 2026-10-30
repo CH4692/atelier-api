@@ -23,8 +23,7 @@ jobs:
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      id-token: write
+      contents: read
     steps:
       - name: Validate release credentials
         env:
@@ -70,18 +69,28 @@ jobs:
           git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
           test "$(git rev-parse origin/main)" = "$TESTED_SHA"
 
-      - name: Check tested commit and prevent recursive releases
+      - name: Check tested release revision
         id: guard
         run: python3 scripts/check_release_guard.py
 
-      - name: Calculate version, update files, tag and create GitHub Release
+      - name: Build and tag the tested commit and create GitHub Release
         id: release
         if: steps.guard.outputs.release == 'true'
         # build_command installs uv inside this Docker action, not on the runner.
         uses: python-semantic-release/python-semantic-release@v10.7.0
         with:
           github_token: ${{ steps.release-token.outputs.token }}
-          strict: true
+          commit: false
+          tag: true
+          push: true
+          changelog: true
+          vcs_release: true
+          # An already released version/no relevant commits is a successful no-op.
+          strict: false
+
+      - name: Include generated changelog in release assets
+        if: steps.release.outputs.released == 'true'
+        run: cp CHANGELOG.md dist/CHANGELOG.md
 
       - name: Upload distributions to GitHub Release
         if: steps.release.outputs.released == 'true'

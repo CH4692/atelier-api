@@ -1,6 +1,6 @@
 # Atelier API – Digitale Werkstattverwaltung für Geigenbau
 
-> **Status:** Früher Prototyp (Version 0.1.0). Die Anwendung ist **nicht produktionsreif**.  
+> **Status:** Früher Prototyp (installierte Version siehe Paketmetadaten). Die Anwendung ist **nicht produktionsreif**.
 > **Pilotbetrieb:** Geigenbauwerkstatt Meister Lampe (Hildesheim).  
 > **Ziel:** Papierbasierte Abläufe und verstreute Excel-Listen schrittweise durch eine sichere, schnelle und nachvollziehbare Webanwendung ersetzen.
 
@@ -447,9 +447,9 @@ Die HTTP-Vertragsversion und die installierte Softwareversion sind unabhängig:
   `/health/ready` unversioniert. Die einzelnen Feature-Router kennen den
   Versionspräfix nicht; `main.py` setzt ihn einmal über einen übergeordneten
   FastAPI-`APIRouter`.
-- Die Softwareversion folgt `MAJOR.MINOR.PATCH` und steht ausschließlich in
-  `pyproject.toml` unter `project.version`. FastAPI und installierte Werkzeuge
-  lesen sie aus den Paketmetadaten. Ein Release von `0.1.0` auf `0.2.0` ändert
+- Die Softwareversion folgt `MAJOR.MINOR.PATCH`; maßgeblich ist der Git-Release-Tag
+  `vMAJOR.MINOR.PATCH`. Hatchling mit `hatch-vcs` erzeugt daraus die dynamische
+  Paketversion. FastAPI und installierte Werkzeuge lesen sie aus den Paketmetadaten. Ein Release von `0.1.0` auf `0.2.0` ändert
   deshalb nicht automatisch `/api/v1`.
 
 Die früheren unversionierten Business-Routen werden nicht parallel angeboten.
@@ -495,93 +495,50 @@ refactor(customers): separate query service
 feat(api)!: replace customer response fields
 ```
 
-Pull Requests erzeugen keine Releases. Nach einem Merge führt die CI auf `main`
-Lint, Formatprüfung, Typprüfung, Paketinstallation, Migrationen und sämtliche
-PostgreSQL-Tests aus. Nur nach einem erfolgreichen Push-CI-Lauf startet
-`.github/workflows/release.yaml`. Der Workflow prüft, dass sein Checkout exakt
-dem getesteten Commit entspricht und weiterhin der aktuelle Stand von `main`
-ist. Anschließend führt er folgende Schritte aus (Git-Push und GitHub Release
-sind keine gemeinsame atomare Transaktion):
+Releases erfolgen tagbasiert nach erfolgreicher **Attelier CI** auf `main`.
+Python Semantic Release 10.7.0 berechnet die nächste Version automatisch, baut
+Distributionsdateien und taggt exakt den geprüften Commit. `commit: false`
+verhindert Versionscommits auf dem geschützten Branch. Release Notes und der
+generierte Changelog werden im GitHub Release veröffentlicht. Ein Branch-Bypass
+ist dafür nicht erforderlich; normale PR-Prüfungen bleiben unverändert.
 
-1. Conventional Commits analysieren; ohne relevante Änderung sauber beenden.
-2. `project.version` und `CHANGELOG.md` aktualisieren.
-3. Im Docker-Container ausschließlich das gepinnte Build-Werkzeug `uv` installieren,
-   ohne die Anwendung oder ihre Laufzeitabhängigkeiten zu installieren. Mit
-   `uv lock --upgrade-package atelier-api` den lokalen Paketeintrag im
-   Lockfile synchronisieren und reproduzierbare Artefakte bauen.
-4. Den Release-Commit `chore(release): … [skip ci]` und Tag `v…` pushen.
-5. Einen GitHub Release erstellen und Wheel sowie Source-Archiv anhängen.
+`pyproject.toml` deklariert `dynamic = ["version"]`. `uv` verwendet den gepinnten
+Hatchling-/VCS-Build-Backend; `uv.lock` fixiert weiterhin die Abhängigkeiten.
+Entwicklungsstände erhalten Entwicklungsversionen. Der Release-Build erhält die
+berechnete neue Version vorübergehend über `SETUPTOOLS_SCM_PRETEND_VERSION` und
+prüft Wheel- und Source-Metadaten vor dem Tag-Push. Ein sauberer Release-Tag liefert
+bei erneutem Build dieselbe Paketversion. Laufzeitabhängigkeiten, insbesondere
+`psycopg2`, werden für den Distributionsbuild nicht installiert.
 
-Der Build bricht beim ersten Fehler ab (`set -eu`). `psycopg2` bleibt als
-Anwendungstreiber unverändert; ein Distributionsbuild benötigt weder dessen
-Installation noch `pg_config`. Bei einer Installation von `psycopg2` aus Quellen
-werden weiterhin PostgreSQL-Entwicklungsdateien und ein C-Compiler benötigt.
-Ein auf dem Runner installiertes `uv` wäre im Docker-Release-Schritt nicht
-automatisch verfügbar, deshalb erfolgt die Installation im Build-Befehl selbst.
+Die App `atelier-release-bot` authentifiziert Checkout und Veröffentlichung mit
+einem kurzlebigen, repositorybezogenen **Contents: Read and write**-Token.
+`RELEASE_APP_CLIENT_ID` und `RELEASE_APP_PRIVATE_KEY` sind verpflichtend; es gibt
+keinen PAT und keinen `GITHUB_TOKEN`-Fallback. Der normale Job-Token hat nur
+Leserechte. Workflow- und SHA-Prüfungen schließen PR-/Fork-Code sowie veraltete
+CI-Stände aus. Da Releases keine Branch-Commits erzeugen und die CI keine
+Tag-Pushes abonniert, entstehen keine rekursiven Releases.
 
-Es erfolgt keine Veröffentlichung auf PyPI. Ausschließlich die GitHub App
-`atelier-release-bot` authentifiziert Checkout, Release-Push und Artefakt-Upload.
-Es gibt keinen Fallback auf `GITHUB_TOKEN`. Fehlende Zugangsdaten, fehlgeschlagene
-Token-Erstellung oder ein leeres Token brechen den Job vor dem Checkout ab;
-Zugangsdaten werden nicht ausgegeben. Die App kann Folgeworkflows auslösen.
-`[skip ci]` im Versionscommit und der zusätzliche geprüfte Release-Guard verhindern
-eine Release-Schleife. Details einschließlich GitHub-Verifikation stehen in
-[docs/releases.md](docs/releases.md). Ein späteres Deployment kann als
-nachgelagerter Job an `steps.release.outputs.released` gekoppelt werden.
+Die read-only Diagnose ergab für das aktive `main`-Ruleset keine Bypass-Akteure.
+Das erklärt den früheren GH013-Fehler trotz App-Authentifizierung. Die gewählte
+Architektur pusht überhaupt nicht auf `main`; etwaige Tag-Regeln müssen weiterhin
+das Anlegen der Release-Tags durch die App erlauben.
 
-Die installierte Version lässt sich unabhängig vom Quellverzeichnis prüfen:
+Installierte Version prüfen:
 
 ```bash
-uv run python -c 'from importlib.metadata import version; print(version("atelier-api"))'
+uv run python -c 'from atelier_api.version import software_version; print(software_version())'
 ```
 
-Eine lokale, nicht veröffentlichende Prüfung auf `main` lautet:
+Lokale Versionsberechnung ohne Veröffentlichung:
 
 ```bash
 uv run semantic-release --noop version --print
 ```
 
-Eine manuelle Veröffentlichung ist nur für einen geprüften, sauberen
-`main`-Stand vorgesehen. Mit einem kurzlebigen, auf `contents: write`
-beschränkten GitHub-Token werden dann `uv run semantic-release version` und bei
-Bedarf `uv run semantic-release publish --tag vX.Y.Z` ausgeführt. Diese Befehle
-erzeugen echte Commits, Tags und Releases und sind keine normale lokale
-Entwicklungsaktion.
-
-Schlägt ein Release vor dem Push fehl, wird die Ursache behoben und derselbe
-Workflow erneut gestartet. Wurden Commit, Tag und GitHub Release bereits
-erstellt, aber Artefakte fehlen, wird ausschließlich `semantic-release publish
---tag vX.Y.Z` wiederholt; veröffentlichte Tags werden nicht verschoben oder
-überschrieben. Bei einem falschen veröffentlichten Release folgt ein neuer
-Korrektur-Release statt History-Rewrite oder Force-Push.
-
-Der Release-Job behält `contents: write` und `id-token: write`. Bei `GH013`
-(Pull Request vorgeschrieben, erforderliche Statuschecks fehlen) wird der neue
-Versionscommit durch die Regeln für `main` blockiert. Die bestandenen Checks
-des ursprünglichen Commits gelten nicht für diesen neuen Commit; mehr
-Workflow-Berechtigungen allein lösen das nicht.
-
-Für den automatischen direkten Release-Push ist eine ausdrückliche Einrichtung
-durch einen Repository-Administrator erforderlich:
-
-1. Die dedizierte GitHub App `atelier-release-bot` mit Repository-Berechtigung **Contents: Read and
-   write** erstellen und nur für dieses Repository installieren.
-2. Unter **Settings → Secrets and variables → Actions** die Variable
-   `RELEASE_APP_CLIENT_ID` mit der Client-ID und das Secret
-   `RELEASE_APP_PRIVATE_KEY` mit dem vollständigen privaten PEM-Schlüssel anlegen.
-3. In allen zutreffenden Rulesets für `main` ausschließlich diese Release-App
-   als Bypass-Akteur mit **Always allow** zulassen. **For pull requests only**
-   erlaubt keinen direkten Push. Auch zutreffende Tag-Regeln für `v*` prüfen.
-   Normale Pull Requests behalten ihre Reviews und erforderlichen Checks.
-
-Der Workflow erzeugt dann einen kurzlebigen, auf dieses Repository und
-`contents: write` beschränkten Installationstoken und verwendet ihn konsistent
-für Checkout, Release-Push und Artefakt-Upload. Die Token-Action widerruft ihn am
-Jobende. Die App ist verpflichtend; es werden keine Repository-Regeln automatisch
-geändert. Die Bypass-Freigabe erlaubt dem Versionscommit, Ruleset-Checks zu umgehen;
-sie belegt nicht, dass dieser neue Commit selbst CI bestanden hat. Erfolgreich
-geprüft ist der Ausgangscommit. Soll kein direkter Release-Push erlaubt
-sein, ist stattdessen ein gesonderter Release-PR-Prozess erforderlich.
+Strategievergleich, Konfiguration, Sicherheitsgrenzen, erster Release,
+Render-/Neon-Deployment und Rollback sind in [docs/releases.md](docs/releases.md)
+beschrieben. Ein Merge dieser Konfiguration kann nach erfolgreicher CI den ersten
+echten Release auslösen; deshalb nur in einem freigegebenen Releasefenster mergen.
 
 ## 3. Geplanter Funktionsumfang
 
