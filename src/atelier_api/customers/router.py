@@ -11,12 +11,46 @@ from atelier_api.audit.schemas import AuditDetails
 from atelier_api.audit.service import record_event
 from atelier_api.database import SessionDep
 from atelier_api.instruments.models import Instrument
+from atelier_api.instruments.schemas import InstrumentRead
 from atelier_api.users.service import audit_customer_removal
 
 from .models import Customer
+from .overview import CustomerOverview
 from .schemas import CustomerArchiveUpdate, CustomerCreate, CustomerRead, CustomerUpdate
 
 customers_router = APIRouter(prefix="/customers")
+
+
+@customers_router.get(
+    "/{customer_id}/overview",
+    tags=["customers"],
+    summary="Get a customer's workshop overview",
+    response_model=CustomerOverview,
+    responses={
+        404: {"description": "Customer not found"},
+        503: {"description": "Database unavailable"},
+    },
+)
+def get_customer_overview(customer_id: int, session: SessionDep) -> CustomerOverview:
+    """Include archived customers and only their currently assigned instruments.
+
+    Instruments are sorted by ID. An existing customer without instruments has
+    an empty instrument list; an unknown customer returns 404.
+    """
+    customer = session.get(Customer, customer_id)
+    if customer is None:
+        raise HTTPException(404, "Customer not found")
+    instruments = session.exec(
+        select(Instrument)
+        .where(Instrument.customer_id == customer_id)
+        .order_by(col(Instrument.id))
+    ).all()
+    return CustomerOverview(
+        customer=CustomerRead.model_validate(customer),
+        instruments=[
+            InstrumentRead.model_validate(instrument) for instrument in instruments
+        ],
+    )
 
 
 @customers_router.get(

@@ -43,6 +43,7 @@ Health und die Anmeldemöglichkeit sind öffentlich.
 | `GET`   | `/health/ready`            | Prüft die Datenbankverbindung                         |
 | `GET`   | `/api/v1/customers`               | Sucht Kunden mit `q`, paginiert mit `offset` und `limit` |
 | `GET`   | `/api/v1/customers/{customer_id}` | Gibt einen Kunden zurück; `404` falls nicht vorhanden |
+| `GET` | `/api/v1/customers/{customer_id}/overview` | Liefert Kundendetails und aktuell zugeordnete Instrumente gemeinsam; `404` bei unbekannter ID |
 | `GET` | `/api/v1/customers/{customer_id}/instruments` | Liefert nur die aktuell zugeordneten Instrumente; `200` oder bei unbekanntem Kunden `404` |
 | `POST`  | `/api/v1/customers`               | Legt einen Kunden an; `201` bei Erfolg                |
 | `PATCH` | `/api/v1/customers/{customer_id}` | Ändert angegebene Kundendaten; `200`, bei unbekannter ID `404` |
@@ -74,6 +75,24 @@ Bei gleichzeitigem Anlegen oder Löschen können Anzahl und Seite voneinander
 abweichen, da sie durch zwei Abfragen ermittelt werden.
 Suchbegriffe sind auf 200 Zeichen begrenzt. Der bestehende Werkstatt-Zugriffsschutz
 gilt auch für die Suche.
+
+### Kundenübersicht
+
+`GET /api/v1/customers/{customer_id}/overview` liefert ein Objekt mit `customer`
+(einschließlich `is_archived`) und `instruments`. Instrumente sind nach ID
+aufsteigend sortiert. Fremde und nicht zugeordnete Instrumente werden nicht
+ausgegeben; ein Kunde ohne Instrumente erhält `instruments: []`. Archivierte
+Kunden bleiben direkt abrufbar. Unbekannte Kunden ergeben HTTP 404, ungültige
+ID-Formate HTTP 422. Nur Administratoren und Mitarbeiter haben Zugriff.
+
+Der Endpunkt bildet aktuelle Instrumentzuordnungen ab, keine Eigentümerhistorie.
+Kundendetails und Instrumente werden in zwei Datenbankabfragen gelesen;
+gleichzeitige Änderungen können zwischen diesen Abfragen sichtbar werden.
+Reparatur-, Mietvertrags-, Rechnungs- und Dokumentmodelle existieren im aktuellen
+Stand noch nicht; dafür enthält diese Basisübersicht keine erfundenen Datensätze
+oder irreführenden leeren Historien. Die Übersicht ist bewusst auf vorhandene
+Kunden- und Instrumentdaten begrenzt. Die weiteren Bereiche werden später mit
+den jeweiligen Fachmodulen ergänzt.
 
 ### Kunden archivieren und wiederherstellen
 
