@@ -12,7 +12,10 @@ Administrative Zusatzinformationen sind auf alte/neue Rollen, alte/neue
 Kundenzuordnungs-IDs und Bereinigungsanzahlen begrenzt; die zentrale Schreibfunktion
 akzeptiert dafür nur ein streng definiertes Schema.
 
-Erfasst werden Kunden- und Instrumentanlage, Änderungen und Löschung; Bootstrap,
+Erfasst werden Kunden- und Instrumentanlage, Änderungen und Löschung;
+Kundenarchivierung (`customer.archived`) und Wiederherstellung (`customer.restored`)
+werden mit der Statusänderung atomar gespeichert, ohne Zuordnungen zu ändern.
+Ebenfalls erfasst werden Bootstrap,
 Benutzeranlage, Aktivierung/Deaktivierung (auch von Kundenkonten), Rollen- und
 Kundenzuordnungsänderungen, Benutzerlöschung und die damit verbundenen
 Session-Sperrungen. Auch die automatische Aufhebung einer Kontenzuordnung beim

@@ -9,3 +9,4 @@ class Customer(CustomerBase, table=True):
     """Store customer details with a database-generated primary key."""
 
     id: int | None = Field(default=None, primary_key=True)
+    is_archived: bool = Field(default=False, nullable=False)

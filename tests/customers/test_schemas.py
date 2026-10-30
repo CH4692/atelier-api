@@ -17,7 +17,7 @@ def customer_data():
 
 def test_accepts_valid_customer(customer_data):
     customer = CustomerRead(**customer_data)
-    assert customer.model_dump() == customer_data
+    assert customer.model_dump() == {**customer_data, "is_archived": False}
 
 
 @pytest.mark.parametrize("field", ["id", "first_name", "last_name", "email"])

@@ -19,34 +19,73 @@ jobs:
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'main'
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: write
       id-token: write
     steps:
+      - name: Validate release credentials
+        env:
+          RELEASE_APP_CLIENT_ID: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+        run: |
+          if [ -z "$RELEASE_APP_CLIENT_ID" ] || [ -z "$RELEASE_APP_PRIVATE_KEY" ]; then
+            echo "::error::RELEASE_APP_CLIENT_ID and RELEASE_APP_PRIVATE_KEY are required."
+            exit 1
+          fi
+
+      - name: Create repository-scoped release token
+        id: release-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: atelier-api
+          permission-contents: write
+
+      - name: Require GitHub App authentication
+        env:
+          RELEASE_TOKEN: ${{ steps.release-token.outputs.token }}
+        run: |
+          if [ -z "$RELEASE_TOKEN" ]; then
+            echo "::error::GitHub App authentication did not produce a token."
+            exit 1
+          fi
+
       - name: Checkout tested main revision
         uses: actions/checkout@v6
         with:
           ref: main
           fetch-depth: 0
+          token: ${{ steps.release-token.outputs.token }}
 
       - name: Verify checkout matches successful CI revision
         env:
           TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
-        run: test "$(git rev-parse HEAD)" = "$TESTED_SHA"
+        run: |
+          test "$(git rev-parse HEAD)" = "$TESTED_SHA"
+          git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse origin/main)" = "$TESTED_SHA"
+
+      - name: Check tested commit and prevent recursive releases
+        id: guard
+        run: python3 scripts/check_release_guard.py
 
       - name: Calculate version, update files, tag and create GitHub Release
         id: release
+        if: steps.guard.outputs.release == 'true'
         # build_command installs uv inside this Docker action, not on the runner.
         uses: python-semantic-release/python-semantic-release@v10.7.0
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ steps.release-token.outputs.token }}
           strict: true
 
       - name: Upload distributions to GitHub Release
         if: steps.release.outputs.released == 'true'
         uses: python-semantic-release/publish-action@v10.7.0
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ steps.release-token.outputs.token }}
           tag: ${{ steps.release.outputs.tag }}

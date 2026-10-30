@@ -19,8 +19,16 @@ def test_migrations_create_customer_table_and_reach_head(postgres_engine):
         "last_name",
         "email",
         "phone",
+        "is_archived",
     }
     assert inspector.get_pk_constraint("customer")["constrained_columns"] == ["id"]
+    archive_column = next(
+        column
+        for column in inspector.get_columns("customer")
+        if column["name"] == "is_archived"
+    )
+    assert archive_column["nullable"] is False
+    assert archive_column["default"] is None
     with postgres_engine.connect() as connection:
         versions = set(
             connection.scalars(text("SELECT version_num FROM alembic_version"))

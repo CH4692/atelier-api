@@ -18,6 +18,41 @@ def release_configuration() -> dict:
         return tomllib.load(file)["tool"]["semantic_release"]
 
 
+def test_release_workflow_uses_one_token_for_checkout_push_and_upload():
+    workflow = (PROJECT_ROOT / ".github/workflows/release.yaml").read_text()
+    assert "uses: actions/create-github-app-token@v3" in workflow
+    assert "if: vars.RELEASE_APP_CLIENT_ID" not in workflow
+    assert "secrets.GITHUB_TOKEN" not in workflow
+    assert "owner: ${{ github.repository_owner }}" in workflow
+    assert "repositories: atelier-api" in workflow
+    assert "client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}" in workflow
+    assert "private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}" in workflow
+    assert "permission-contents: write" in workflow
+    credential = "${{ steps.release-token.outputs.token }}"
+    assert workflow.count(f"token: {credential}") == 3
+    assert workflow.count(f"github_token: {credential}") == 2
+    assert "ref: main" in workflow
+    assert "fetch-depth: 0" in workflow
+
+
+def test_release_workflow_preserves_ci_guards_and_prevents_release_loops():
+    workflow = (PROJECT_ROOT / ".github/workflows/release.yaml").read_text()
+    assert "conclusion == 'success'" in workflow
+    assert "event == 'push'" in workflow
+    assert "head_branch == 'main'" in workflow
+    assert "github.event.workflow_run.head_commit.message" not in workflow
+    assert (
+        "github.event.workflow_run.head_repository.full_name == github.repository"
+        in workflow
+    )
+    assert "python3 scripts/check_release_guard.py" in workflow
+    assert "if: steps.guard.outputs.release == 'true'" in workflow
+    assert "[skip ci]" in release_configuration()["commit_message"]
+    assert "cancel-in-progress: false" in workflow
+    assert "$TESTED_SHA" in workflow
+    assert "if: steps.release.outputs.released == 'true'" in workflow
+
+
 def test_release_configuration_has_one_canonical_version_source():
     config = release_configuration()
     assert config["version_toml"] == ["pyproject.toml:project.version:nf"]

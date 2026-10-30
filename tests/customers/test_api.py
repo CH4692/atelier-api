@@ -266,7 +266,7 @@ def test_update_customer_all_fields(client, mock_session, update_target):
     }
     response = client.patch("/api/v1/customers/1", json=payload)
     assert response.status_code == 200
-    assert response.json() == {"id": 1, **payload}
+    assert response.json() == {"id": 1, **payload, "is_archived": False}
     mock_session.get.assert_called_once_with(Customer, 1)
     mock_session.add.assert_called_once_with(update_target)
     mock_session.commit.assert_called_once()

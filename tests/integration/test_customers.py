@@ -94,7 +94,7 @@ def test_create_and_retrieve_customer(postgres_client, db_connection, phone):
     created = response.json()
     assert isinstance(created["id"], int)
     assert created["id"] > 0
-    assert created == {**payload, "id": created["id"]}
+    assert created == {**payload, "id": created["id"], "is_archived": False}
 
     # This session shares no identity map with the session used by the POST request.
     with Session(
