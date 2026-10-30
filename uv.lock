@@ -180,7 +180,6 @@ wheels = [
 
 [[package]]
 name = "atelier-api"
-version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
@@ -228,7 +227,7 @@ dev = [
     { name = "mypy", specifier = ">=2.4.0" },
     { name = "pydantic", specifier = ">=2.14.1" },
     { name = "pytest", specifier = ">=9.1.1" },
-    { name = "python-semantic-release", specifier = ">=10.7.0,<11" },
+    { name = "python-semantic-release", specifier = "==10.7.0" },
     { name = "ruff", specifier = ">=0.17.1" },
 ]
 

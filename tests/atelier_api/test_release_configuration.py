@@ -28,11 +28,15 @@ def test_release_workflow_uses_one_token_for_checkout_push_and_upload():
     assert "client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}" in workflow
     assert "private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}" in workflow
     assert "permission-contents: write" in workflow
+    assert "id-token:" not in workflow
+    assert "      contents: read" in workflow
     credential = "${{ steps.release-token.outputs.token }}"
     assert workflow.count(f"token: {credential}") == 3
     assert workflow.count(f"github_token: {credential}") == 2
     assert "ref: main" in workflow
     assert "fetch-depth: 0" in workflow
+    ci = (PROJECT_ROOT / ".github/workflows/ci.yaml").read_text()
+    assert ci.count("fetch-depth: 0") == ci.count("uses: actions/checkout@v6")
 
 
 def test_release_workflow_preserves_ci_guards_and_prevents_release_loops():
@@ -46,8 +50,13 @@ def test_release_workflow_preserves_ci_guards_and_prevents_release_loops():
         in workflow
     )
     assert "python3 scripts/check_release_guard.py" in workflow
+    assert "commit: false" in workflow
+    assert "tag: true" in workflow
+    assert "push: true" in workflow
+    assert "strict: false" in workflow
     assert "if: steps.guard.outputs.release == 'true'" in workflow
-    assert "[skip ci]" in release_configuration()["commit_message"]
+    assert "branches:" not in workflow.split("permissions:", 1)[0]
+    assert "tags:" not in (PROJECT_ROOT / ".github/workflows/ci.yaml").read_text()
     assert "cancel-in-progress: false" in workflow
     assert "$TESTED_SHA" in workflow
     assert "if: steps.release.outputs.released == 'true'" in workflow
@@ -55,11 +64,21 @@ def test_release_workflow_preserves_ci_guards_and_prevents_release_loops():
 
 def test_release_configuration_has_one_canonical_version_source():
     config = release_configuration()
-    assert config["version_toml"] == ["pyproject.toml:project.version:nf"]
+    assert config["version_toml"] == []
+    with (PROJECT_ROOT / "pyproject.toml").open("rb") as file:
+        project = tomllib.load(file)
+    assert "version" not in project["project"]
+    assert project["project"]["dynamic"] == ["version"]
+    assert project["tool"]["hatch"]["version"]["source"] == "vcs"
+    assert project["build-system"]["build-backend"] == "hatchling.build"
     assert config["branches"] == {"main": {"match": "main", "prerelease": False}}
     assert config["tag_format"] == "v{version}"
-    assert "uv lock --upgrade-package" in config["build_command"]
-    assert "git add uv.lock" in config["build_command"]
+    assert "uv lock" not in config["build_command"]
+    assert "git add" not in config["build_command"]
+    assert (
+        'SETUPTOOLS_SCM_PRETEND_VERSION="$NEW_VERSION" uv build'
+        in config["build_command"]
+    )
 
 
 def test_release_build_installs_only_the_pinned_build_tool():
@@ -69,7 +88,7 @@ def test_release_build_installs_only_the_pinned_build_tool():
     command = project["tool"]["semantic_release"]["build_command"]
     assert f"python -m pip install --only-binary=:all: '{uv_requirement}'" in command
     assert "pip install -e" not in command
-    assert command.strip().endswith("uv build")
+    assert 'python scripts/check_release_artifacts.py "$NEW_VERSION"' in command
 
 
 def test_release_build_stops_if_tool_installation_fails(tmp_path):
