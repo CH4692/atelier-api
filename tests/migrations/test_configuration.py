@@ -26,6 +26,8 @@ def test_offline_postgresql_sql_uses_environment_without_connecting():
     assert result.returncode == 0, result.stderr
     assert "CREATE TABLE customer" in result.stdout
     assert "SERIAL" in result.stdout
+    assert "ADD COLUMN is_archived BOOLEAN DEFAULT false NOT NULL" in result.stdout
+    assert "ALTER COLUMN is_archived DROP DEFAULT" in result.stdout
     assert "private" not in result.stdout + result.stderr
 
 

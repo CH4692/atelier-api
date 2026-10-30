@@ -1,6 +1,6 @@
 """Define customer API payloads and field validation."""
 
-from pydantic import EmailStr, field_validator
+from pydantic import EmailStr, StrictBool, field_validator
 from sqlmodel import SQLModel
 
 
@@ -17,6 +17,14 @@ class CustomerRead(CustomerBase):
     """Represent a stored customer, including its identifier."""
 
     id: int
+    is_archived: bool = False
+
+
+class CustomerArchiveUpdate(SQLModel):
+    """Set archive state independently of personal details and permanent deletion."""
+
+    model_config = {"extra": "forbid"}
+    is_archived: StrictBool
 
 
 class CustomerCreate(CustomerBase):

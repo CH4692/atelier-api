@@ -14,6 +14,8 @@ class AuditAction(StrEnum):
     CUSTOMER_CREATED = "customer.created"
     CUSTOMER_UPDATED = "customer.updated"
     CUSTOMER_DELETED = "customer.deleted"
+    CUSTOMER_ARCHIVED = "customer.archived"
+    CUSTOMER_RESTORED = "customer.restored"
     INSTRUMENT_CREATED = "instrument.created"
     INSTRUMENT_UPDATED = "instrument.updated"
     INSTRUMENT_DELETED = "instrument.deleted"

@@ -59,7 +59,7 @@ Health und die Anmeldemöglichkeit sind öffentlich.
 Vorname, Nachname, vollständigem Namen (Vorname Nachname), E-Mail und Telefonnummer.
 Groß-/Kleinschreibung wird ignoriert; `%` und `_` werden wörtlich gesucht.
 Telefonnummern werden in ihrer gespeicherten Schreibweise durchsucht.
-Ohne `q` oder bei ausschließlich Leerzeichen werden alle Kunden paginiert
+Ohne `q` oder bei ausschließlich Leerzeichen werden alle nicht archivierten Kunden paginiert
 aufgelistet. Ergebnisse sind nach ID aufsteigend sortiert; ohne Treffer folgt `[]`.
 `offset` beginnt bei 0, `limit` ist standardmäßig 100 (erlaubt: 1–200).
 Der Response-Header `X-Total-Count` enthält die Gesamtanzahl passender Kunden
@@ -68,11 +68,40 @@ ist per CORS für zugelassene Browser-Clients lesbar. Der Antwort-Body bleibt ei
 Liste. Beispiel: Bei 23 Treffern liefert `offset=20&limit=10` drei Kunden und
 `X-Total-Count: 23`; ab `offset=23` folgt `[]` mit derselben Gesamtanzahl.
 Negative oder nicht ganzzahlige Offsets sowie Seitengrößen außerhalb von 1–200
-werden mit HTTP 422 abgewiesen. Ohne Suchfilter zählt der Header alle Kunden.
+werden mit HTTP 422 abgewiesen. Ohne Suchfilter zählt der Header alle Kunden
+innerhalb des gewählten Archivfilters.
 Bei gleichzeitigem Anlegen oder Löschen können Anzahl und Seite voneinander
 abweichen, da sie durch zwei Abfragen ermittelt werden.
 Suchbegriffe sind auf 200 Zeichen begrenzt. Der bestehende Werkstatt-Zugriffsschutz
 gilt auch für die Suche.
+
+### Kunden archivieren und wiederherstellen
+
+`PATCH /api/v1/customers/{customer_id}/archive` mit `{"is_archived": true}`
+archiviert einen Kunden; mit `{"is_archived": false}` wird er wiederhergestellt.
+Nur Administratoren und Mitarbeiter dürfen diese Operation ausführen. Die
+Antwort enthält den vollständigen Kunden einschließlich `is_archived` (HTTP 200).
+Neue und bei der Migration vorhandene Kunden sind zunächst nicht archiviert.
+Unbekannte IDs ergeben HTTP 404, ungültige Eingaben HTTP 422. Wiederholte
+Zuweisungen desselben Zustands verändern nichts und erzeugen kein Audit-Ereignis.
+
+Archivierte Kunden sind aus der Standardliste und -suche einschließlich
+`X-Total-Count` ausgeschlossen. `include_archived=true` schließt sie ausdrücklich
+wieder ein. Der direkte Abruf per ID bleibt möglich. Archivierung verändert weder
+persönliche Daten noch Instrumentzuordnungen, Benutzerzuordnungen oder
+Anmeldeberechtigungen; sie ist keine Benutzerdeaktivierung. Die Wiederherstellung
+macht denselben Datensatz mit derselben ID wieder in der Standardsuche sichtbar.
+Archivierung und Audit-Ereignis werden gemeinsam committet.
+
+Archivierung ist keine Löschung und erfüllt allein keine Löschpflicht.
+`DELETE /api/v1/customers/{customer_id}` bleibt eine separate, endgültige Operation
+mit den bisherigen Auswirkungen auf Zuordnungen. Es gibt weder automatische
+Löschung archivierter Kunden noch eine technisch hinterlegte Kunden-Aufbewahrungsfrist.
+Vor einer endgültigen Löschung muss der Betreiber die betrieblich festgelegten
+Aufbewahrungsanforderungen und gegebenenfalls Aufbewahrungsstopps prüfen. Die
+Audit-Aufbewahrungsfrist gilt ausschließlich für das Audit-Protokoll.
+
+Die Migration `f31b62d04a89` wird mit `uv run alembic upgrade head` eingespielt.
 
 ### Kundendaten aktualisieren
 
@@ -470,7 +499,9 @@ Pull Requests erzeugen keine Releases. Nach einem Merge führt die CI auf `main`
 Lint, Formatprüfung, Typprüfung, Paketinstallation, Migrationen und sämtliche
 PostgreSQL-Tests aus. Nur nach einem erfolgreichen Push-CI-Lauf startet
 `.github/workflows/release.yaml`. Der Workflow prüft, dass sein Checkout exakt
-dem getesteten Commit entspricht, und führt dann atomar folgende Schritte aus:
+dem getesteten Commit entspricht und weiterhin der aktuelle Stand von `main`
+ist. Anschließend führt er folgende Schritte aus (Git-Push und GitHub Release
+sind keine gemeinsame atomare Transaktion):
 
 1. Conventional Commits analysieren; ohne relevante Änderung sauber beenden.
 2. `project.version` und `CHANGELOG.md` aktualisieren.
@@ -488,11 +519,15 @@ werden weiterhin PostgreSQL-Entwicklungsdateien und ein C-Compiler benötigt.
 Ein auf dem Runner installiertes `uv` wäre im Docker-Release-Schritt nicht
 automatisch verfügbar, deshalb erfolgt die Installation im Build-Befehl selbst.
 
-Es erfolgt keine Veröffentlichung auf PyPI. `GITHUB_TOKEN`-erzeugte Commits und
-Tags starten bei GitHub keine weiteren Workflows. Das verhindert Rekursion; ein
-späteres Deployment muss deshalb als nachgelagerter Job desselben
-Release-Workflows an `steps.release.outputs.released` gekoppelt werden und darf
-nicht blind auf einen neuen Tag-Workflow vertrauen.
+Es erfolgt keine Veröffentlichung auf PyPI. Ausschließlich die GitHub App
+`atelier-release-bot` authentifiziert Checkout, Release-Push und Artefakt-Upload.
+Es gibt keinen Fallback auf `GITHUB_TOKEN`. Fehlende Zugangsdaten, fehlgeschlagene
+Token-Erstellung oder ein leeres Token brechen den Job vor dem Checkout ab;
+Zugangsdaten werden nicht ausgegeben. Die App kann Folgeworkflows auslösen.
+`[skip ci]` im Versionscommit und der zusätzliche geprüfte Release-Guard verhindern
+eine Release-Schleife. Details einschließlich GitHub-Verifikation stehen in
+[docs/releases.md](docs/releases.md). Ein späteres Deployment kann als
+nachgelagerter Job an `steps.release.outputs.released` gekoppelt werden.
 
 Die installierte Version lässt sich unabhängig vom Quellverzeichnis prüfen:
 
@@ -520,13 +555,33 @@ erstellt, aber Artefakte fehlen, wird ausschließlich `semantic-release publish
 überschrieben. Bei einem falschen veröffentlichten Release folgt ein neuer
 Korrektur-Release statt History-Rewrite oder Force-Push.
 
-Der Release-Job besitzt nur `contents: write` und `id-token: write`. Geschützte
-`main`-Branches können den automatischen Versionscommit blockieren. Dann muss
-die Repository-Regel entweder GitHub Actions ausdrücklich für diesen Workflow
-zulassen oder ein GitHub-App-Token mit minimalem `contents: write`, kurzer
-Lebensdauer und gezielter Ruleset-Freigabe als `github_token` verwendet werden.
-Branch-Schutz darf nicht still umgangen werden. Erforderliche CI-Checks bleiben
-als Pull-Request-Regel aktiv.
+Der Release-Job behält `contents: write` und `id-token: write`. Bei `GH013`
+(Pull Request vorgeschrieben, erforderliche Statuschecks fehlen) wird der neue
+Versionscommit durch die Regeln für `main` blockiert. Die bestandenen Checks
+des ursprünglichen Commits gelten nicht für diesen neuen Commit; mehr
+Workflow-Berechtigungen allein lösen das nicht.
+
+Für den automatischen direkten Release-Push ist eine ausdrückliche Einrichtung
+durch einen Repository-Administrator erforderlich:
+
+1. Die dedizierte GitHub App `atelier-release-bot` mit Repository-Berechtigung **Contents: Read and
+   write** erstellen und nur für dieses Repository installieren.
+2. Unter **Settings → Secrets and variables → Actions** die Variable
+   `RELEASE_APP_CLIENT_ID` mit der Client-ID und das Secret
+   `RELEASE_APP_PRIVATE_KEY` mit dem vollständigen privaten PEM-Schlüssel anlegen.
+3. In allen zutreffenden Rulesets für `main` ausschließlich diese Release-App
+   als Bypass-Akteur mit **Always allow** zulassen. **For pull requests only**
+   erlaubt keinen direkten Push. Auch zutreffende Tag-Regeln für `v*` prüfen.
+   Normale Pull Requests behalten ihre Reviews und erforderlichen Checks.
+
+Der Workflow erzeugt dann einen kurzlebigen, auf dieses Repository und
+`contents: write` beschränkten Installationstoken und verwendet ihn konsistent
+für Checkout, Release-Push und Artefakt-Upload. Die Token-Action widerruft ihn am
+Jobende. Die App ist verpflichtend; es werden keine Repository-Regeln automatisch
+geändert. Die Bypass-Freigabe erlaubt dem Versionscommit, Ruleset-Checks zu umgehen;
+sie belegt nicht, dass dieser neue Commit selbst CI bestanden hat. Erfolgreich
+geprüft ist der Ausgangscommit. Soll kein direkter Release-Push erlaubt
+sein, ist stattdessen ein gesonderter Release-PR-Prozess erforderlich.
 
 ## 3. Geplanter Funktionsumfang
 

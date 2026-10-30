@@ -14,7 +14,7 @@ from atelier_api.instruments.models import Instrument
 from atelier_api.users.service import audit_customer_removal
 
 from .models import Customer
-from .schemas import CustomerCreate, CustomerRead, CustomerUpdate
+from .schemas import CustomerArchiveUpdate, CustomerCreate, CustomerRead, CustomerUpdate
 
 customers_router = APIRouter(prefix="/customers")
 
@@ -42,6 +42,7 @@ async def get_customers(
     q: Annotated[str | None, Query(max_length=200)] = None,
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    include_archived: bool = False,
 ) -> list[CustomerRead]:
     """Search names, email and phone using case-insensitive literal substrings.
 
@@ -50,8 +51,12 @@ async def get_customers(
     Full names can be searched in first-name last-name order.
     X-Total-Count reports matching customers before pagination, including for
     empty pages. Count and page queries may observe concurrent committed changes.
+    Archived customers are excluded unless include_archived is true. Direct ID
+    retrieval and resource associations remain available for historical records.
     """
     statement = select(Customer)
+    if not include_archived:
+        statement = statement.where(col(Customer.is_archived).is_(False))
     if q is not None and (term := q.strip()):
         statement = statement.where(
             or_(
@@ -73,6 +78,46 @@ async def get_customers(
         statement.order_by(col(Customer.id)).offset(offset).limit(limit)
     ).all()
     return [CustomerRead.model_validate(customer) for customer in customers]
+
+
+@customers_router.patch(
+    "/{customer_id}/archive",
+    tags=["customers"],
+    summary="Archive or restore a customer",
+    response_model=CustomerRead,
+    responses={
+        404: {"description": "Customer not found"},
+        503: {"description": "Database unavailable"},
+    },
+)
+def set_customer_archive(
+    customer_id: int, data: CustomerArchiveUpdate, session: SessionDep
+) -> CustomerRead:
+    """Change visibility without removing records, associations or account access.
+
+    Repeating the current state is a no-op. Keep the transition and its audit
+    event in one transaction, serializing concurrent archive/restore requests.
+    """
+    customer = session.exec(
+        select(Customer).where(Customer.id == customer_id).with_for_update()
+    ).first()
+    if customer is None:
+        raise HTTPException(404, "Customer not found")
+    if customer.is_archived != data.is_archived:
+        customer.is_archived = data.is_archived
+        session.add(customer)
+        record_event(
+            session,
+            AuditAction.CUSTOMER_ARCHIVED
+            if data.is_archived
+            else AuditAction.CUSTOMER_RESTORED,
+            AuditResource.CUSTOMER,
+            customer.id,
+            actor_id=session.info.get("audit_actor_id"),
+        )
+        session.commit()
+        session.refresh(customer)
+    return CustomerRead.model_validate(customer)
 
 
 @customers_router.post(
