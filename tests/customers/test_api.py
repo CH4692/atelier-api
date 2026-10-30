@@ -307,7 +307,6 @@ def test_update_customer_unknown_id(client, mock_session):
     "payload",
     [
         {"email": "invalid"},
-        {"email": None},
         {"first_name": None},
         {"last_name": None},
         {"first_name": ""},

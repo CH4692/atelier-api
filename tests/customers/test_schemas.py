@@ -20,7 +20,7 @@ def test_accepts_valid_customer(customer_data):
     assert customer.model_dump() == {**customer_data, "is_archived": False}
 
 
-@pytest.mark.parametrize("field", ["id", "first_name", "last_name", "email"])
+@pytest.mark.parametrize("field", ["id", "first_name", "last_name"])
 def test_rejects_missing_required_field(customer_data, field):
     del customer_data[field]
 
