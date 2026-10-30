@@ -12,7 +12,7 @@ def searchable_customers(postgres_client):
     for first, last, email, phone in (
         ("Maria", "Mueller", "maria@example.com", "+49 176 123456"),
         ("Jon", "Doe", "jon@example.org", None),
-        ("Marie", "Doe", "discount@example.com", "50%_off"),
+        ("Marie50%_off", "Doe", "discount@example.com", "+33123456789"),
     ):
         response = postgres_client.post(
             "/api/v1/customers",
@@ -34,7 +34,7 @@ def searchable_customers(postgres_client):
         ("mAR", [0, 2]),
         ("DOE", [1, 2]),
         ("RIA@EXAMPLE", [0]),
-        ("176 123", [0]),
+        ("176123", [0]),
         ("  MARIA MUELL  ", [0]),
         ("not-found", []),
         ("%", [2]),

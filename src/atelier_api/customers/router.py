@@ -287,7 +287,7 @@ def update_customer(
 ) -> CustomerRead:
     """Update supplied fields; omitted fields remain unchanged.
 
-    Set phone to null to remove it. Names and email cannot be null.
+    Set email or phone to null or blank text to remove it. Names cannot be null.
     An empty object returns the existing customer unchanged.
 
     Args:

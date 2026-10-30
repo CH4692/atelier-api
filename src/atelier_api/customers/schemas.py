@@ -1,20 +1,60 @@
-"""Define customer API payloads and field validation."""
+"""Validate customer names and optional normalized contact information."""
+
+import re
 
 from pydantic import EmailStr, StrictBool, field_validator
-from sqlmodel import SQLModel
+from sqlalchemy import String
+from sqlmodel import Field, SQLModel
 
 
-class CustomerBase(SQLModel):
-    """Share customer fields across API schemas and the table model."""
+class CustomerValidation(SQLModel):
+    """Share normalization between creation, partial updates and responses."""
 
-    first_name: str
-    last_name: str
-    email: EmailStr
-    phone: str | None = None
+    @field_validator("first_name", "last_name", mode="before", check_fields=False)
+    @classmethod
+    def normalize_name(cls, value: object) -> str:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("Name must be non-empty text")
+        return value.strip()
+
+    @field_validator("email", mode="before", check_fields=False)
+    @classmethod
+    def normalize_email(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip() or None
+        return value
+
+    @field_validator("phone", mode="before", check_fields=False)
+    @classmethod
+    def normalize_phone(cls, value: object) -> str | None:
+        """Strip formatting without guessing a country code or accepting extensions."""
+        if value is None:
+            return None
+        if not isinstance(value, str) or len(value) > 64:
+            raise ValueError("Telephone must be text of at most 64 characters")
+        if not value.strip():
+            return None
+        number = re.sub(r"[\s()./\-]", "", value)
+        if number.startswith("00"):
+            number = "+" + number[2:]
+        if not re.fullmatch(r"(?:\+[1-9][0-9]{2,14}|[0-9]{3,15})", number):
+            raise ValueError(
+                "Telephone must contain 3–15 digits and an optional international prefix"
+            )
+        return number
+
+
+class CustomerBase(CustomerValidation):
+    """Share bounded fields across API schemas and the table model."""
+
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    email: EmailStr | None = Field(default=None, max_length=254)
+    phone: str | None = Field(default=None, max_length=64, sa_type=String(16))
 
 
 class CustomerRead(CustomerBase):
-    """Represent a stored customer, including its identifier."""
+    """Represent a stored customer, including archive state."""
 
     id: int
     is_archived: bool = False
@@ -28,56 +68,17 @@ class CustomerArchiveUpdate(SQLModel):
 
 
 class CustomerCreate(CustomerBase):
-    """Accept customer details without a client-supplied identifier."""
+    """Accept names and optional contact details without a client-supplied ID."""
 
 
-class CustomerUpdate(SQLModel):
-    """Validate partial updates while distinguishing omitted fields from null.
+class CustomerUpdate(CustomerValidation):
+    """Preserve omitted fields; clear contacts with null or blank text.
 
-    Only phone can explicitly be cleared. Names and email may be omitted but
-    cannot be null when supplied. Unknown fields are rejected.
+    Supplied names cannot be null. Unknown fields are rejected.
     """
 
-    first_name: str | None = None
-    last_name: str | None = None
-    email: EmailStr | None = None
-    phone: str | None = None
-
     model_config = {"extra": "forbid"}
-
-    @field_validator("first_name", "last_name", "email")
-    @classmethod
-    def reject_null(cls, value: str | None) -> str:
-        """Reject explicit null values while allowing omitted fields.
-
-        Args:
-            value: A supplied name or validated email value.
-
-        Returns:
-            The supplied non-null value.
-
-        Raises:
-            ValueError: If the supplied value is null.
-        """
-        if value is None:
-            raise ValueError("This field cannot be null")
-        return value
-
-    @field_validator("first_name", "last_name")
-    @classmethod
-    def validate_name(cls, value: str) -> str:
-        """Trim a supplied name and reject empty results.
-
-        Args:
-            value: The non-null first or last name.
-
-        Returns:
-            The name with surrounding whitespace removed.
-
-        Raises:
-            ValueError: If the name is empty after trimming.
-        """
-        value = value.strip()
-        if not value:
-            raise ValueError("Name must not be empty")
-        return value
+    first_name: str | None = Field(default=None, min_length=1, max_length=100)
+    last_name: str | None = Field(default=None, min_length=1, max_length=100)
+    email: EmailStr | None = Field(default=None, max_length=254)
+    phone: str | None = Field(default=None, max_length=64)

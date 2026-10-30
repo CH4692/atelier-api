@@ -54,7 +54,7 @@ Health und die Anmeldemöglichkeit sind öffentlich.
 | `PATCH` | `/api/v1/instruments/{instrument_id}` | Ändert Instrumentdetails und Kundenzuordnung; `200`, bei unbekanntem Instrument oder Kunden `404` |
 | `DELETE` | `/api/v1/instruments/{instrument_id}` | Löscht ein Instrument dauerhaft; `204` ohne Inhalt, bei unbekannter ID `404` |
 
-**Aktuelles Kundenmodell:** numerische ID, Vorname, Nachname, E-Mail-Adresse und optionale Telefonnummer. Kundendaten können teilweise aktualisiert werden. Kunden können dauerhaft gelöscht werden.
+**Aktuelles Kundenmodell:** numerische ID, Vorname, Nachname sowie optionale E-Mail-Adresse und Telefonnummer. Kundendaten können teilweise aktualisiert werden. Kunden können dauerhaft gelöscht werden.
 
 `GET /api/v1/customers?q=maria&offset=0&limit=25` sucht nach Teiltreffern in
 Vorname, Nachname, vollständigem Namen (Vorname Nachname), E-Mail und Telefonnummer.
@@ -75,6 +75,39 @@ Bei gleichzeitigem Anlegen oder Löschen können Anzahl und Seite voneinander
 abweichen, da sie durch zwei Abfragen ermittelt werden.
 Suchbegriffe sind auf 200 Zeichen begrenzt. Der bestehende Werkstatt-Zugriffsschutz
 gilt auch für die Suche.
+
+### Validierung von Kundendaten
+
+Bei Anlage sind nur Vorname und Nachname erforderlich. Beide werden außen von
+Leerraum (auch Unicode-Leerraum) bereinigt und müssen danach 1–100 Zeichen lang
+sein. Innere Leerzeichen bleiben erhalten. E-Mail und Telefon sind optional;
+fehlende Angaben erscheinen als `null`. E-Mail-Adressen werden nach dem Trimmen
+mit Pydantic `EmailStr` geprüft und sind auf 254 Zeichen begrenzt. Die Domain
+wird normalisiert, der lokale Teil wird nicht pauschal kleingeschrieben.
+
+Telefonangaben dürfen vor Normalisierung höchstens 64 Zeichen umfassen.
+Leerzeichen, Klammern, Punkte, Schrägstriche und Bindestriche werden entfernt.
+`0049 (176) 123-4567` wird beispielsweise zu `+491761234567`. Gespeichert werden
+3–15 ASCII-Ziffern mit optionalem `+` (maximal 16 Zeichen); ein internationaler
+Präfix darf nicht mit Null beginnen. Nationale Nummern wie `0176 1234567` bleiben
+national (`01761234567`): Es wird kein Land geraten. Buchstaben und Durchwahlen
+werden abgewiesen. Die Formatprüfung bestätigt weder Erreichbarkeit noch die
+Zuteilung der Nummer. Telefonnummernsuche verwendet die gespeicherte Schreibweise.
+
+Ungültige Eingaben ergeben HTTP 422, bevor Daten geschrieben werden. PostgreSQL
+sichert Feldlängen, nichtleere getrimmte Namen und das normalisierte Telefonformat
+zusätzlich ab. Die vollständige E-Mail-Syntaxprüfung erfolgt in der Anwendung.
+
+Migration: `uv run alembic upgrade head` (Revision `a42d73e15b90`). Sie trimmt
+vorhandene Namen und Kontaktfelder, wandelt leere Kontakte in `NULL` um und
+normalisiert Telefonnummern. Ungültige Namen/Telefonnummern oder zu lange Werte
+brechen die gesamte PostgreSQL-Migration ab; nichts wird abgeschnitten oder
+gelöscht. Vor dem Rollout bestehende Daten und Backup prüfen, problematische
+Werte fachlich korrigieren und erneut migrieren. Ein Downgrade bricht ab, solange
+Kunden ohne E-Mail bestehen, da die alte Version `NOT NULL` verlangt. Bereits
+normalisierte Formatierung kann durch einen Downgrade nicht rekonstruiert werden.
+Diese Kundenregeln ändern nicht die weiterhin erforderliche Login-E-Mail von
+Anwendungsbenutzern.
 
 ### Kundenübersicht
 
@@ -132,7 +165,7 @@ curl --fail-with-body -X PATCH -b /private/tmp/atelier-cookies.txt -H 'Origin: h
   -d '{"first_name":"Maria","email":"maria@example.com","phone":null}'
 ```
 
-Nicht angegebene Felder bleiben unverändert. `phone: null` entfernt die Telefonnummer. Vorname, Nachname und E-Mail dürfen nicht `null` sein; Namen werden getrimmt und dürfen nicht leer sein. E-Mail-Adressen werden validiert. Unbekannte Felder (einschließlich `id`) werden mit HTTP 422 abgewiesen. Ein leerer JSON-Body `{}` liefert den vorhandenen Kunden unverändert zurück. Eine unbekannte Kunden-ID ergibt HTTP 404. Request- und Antwortschema sind unter `/docs` dokumentiert.
+Nicht angegebene Felder bleiben unverändert. `email: null` und `phone: null` entfernen die jeweilige Kontaktangabe; leere oder nur aus Leerraum bestehende Kontaktfelder werden ebenfalls als `null` gespeichert. Vorname und Nachname dürfen nicht `null` sein; Namen werden getrimmt und dürfen nicht leer sein. E-Mail-Adressen werden validiert, wenn angegeben. Unbekannte Felder (einschließlich `id`) werden mit HTTP 422 abgewiesen. Ein leerer JSON-Body `{}` liefert den vorhandenen Kunden unverändert zurück. Eine unbekannte Kunden-ID ergibt HTTP 404. Request- und Antwortschema sind unter `/docs` dokumentiert.
 
 ### Audit-Protokoll
 

@@ -29,6 +29,12 @@ def test_migrations_create_customer_table_and_reach_head(postgres_engine):
     )
     assert archive_column["nullable"] is False
     assert archive_column["default"] is None
+    columns = {column["name"]: column for column in inspector.get_columns("customer")}
+    assert {
+        name: columns[name]["type"].length
+        for name in ("first_name", "last_name", "email", "phone")
+    } == {"first_name": 100, "last_name": 100, "email": 254, "phone": 16}
+    assert columns["email"]["nullable"] is True
     with postgres_engine.connect() as connection:
         versions = set(
             connection.scalars(text("SELECT version_num FROM alembic_version"))
