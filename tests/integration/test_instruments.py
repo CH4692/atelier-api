@@ -153,7 +153,7 @@ def test_database_constraints_reject_invalid_direct_writes(
     with pytest.raises(IntegrityError), db_connection.begin_nested():
         db_connection.execute(
             text(
-                "INSERT INTO instrument (type, year_of_manufacture) VALUES (:type, :year)"
+                "INSERT INTO instrument (type, year_of_manufacture, ownership) VALUES (:type, :year, 'unassigned')"
             ),
             {"type": instrument_type, "year": year},
         )

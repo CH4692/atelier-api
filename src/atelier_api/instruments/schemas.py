@@ -1,8 +1,9 @@
 """Validate instrument details for persistence and API representations."""
 
+from datetime import UTC, datetime
 from enum import StrEnum
 
-from pydantic import field_validator
+from pydantic import AwareDatetime, field_validator, model_validator
 from sqlalchemy import Enum, Text
 from sqlmodel import Field, SQLModel
 
@@ -16,11 +17,20 @@ class InstrumentType(StrEnum):
     DOUBLE_BASS = "double_bass"
 
 
+class InstrumentOwnership(StrEnum):
+    """Distinguish known workshop stock from customer or unassigned ownership."""
+
+    CUSTOMER = "customer"
+    WORKSHOP = "workshop"
+    UNASSIGNED = "unassigned"
+
+
 class InstrumentBase(SQLModel):
     """Share instrument fields across the table and input/output schemas.
 
-    Only type is required. An omitted customer represents an unassigned
-    instrument, including workshop stock. Unknown manufacture years stay null.
+    Only type is required. Legacy customer assignments infer customer ownership;
+    otherwise ownership defaults to unassigned. Workshop stock is explicit.
+    Customer ownership can retain an unknown owner after customer deletion.
     """
 
     model_config = {"extra": "forbid"}
@@ -46,6 +56,40 @@ class InstrumentBase(SQLModel):
         ondelete="SET NULL",
         index=True,
     )
+    ownership: InstrumentOwnership = Field(
+        default=InstrumentOwnership.UNASSIGNED,
+        sa_type=Enum(
+            InstrumentOwnership,
+            values_callable=lambda entries: [entry.value for entry in entries],
+            native_enum=False,
+            create_constraint=True,
+            name="ck_instrument_ownership",
+            length=16,
+        ),
+        index=True,
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def infer_legacy_ownership(cls, value: object) -> object:
+        """Preserve older create requests that supplied only customer_id."""
+        if isinstance(value, dict) and "ownership" not in value:
+            return {
+                **value,
+                "ownership": InstrumentOwnership.CUSTOMER
+                if value.get("customer_id") is not None
+                else InstrumentOwnership.UNASSIGNED,
+            }
+        return value
+
+    @model_validator(mode="after")
+    def validate_owner(self) -> InstrumentBase:
+        if (
+            self.customer_id is not None
+            and self.ownership != InstrumentOwnership.CUSTOMER
+        ):
+            raise ValueError("Only customer-owned instruments can reference a customer")
+        return self
 
 
 class InstrumentCreate(InstrumentBase):
@@ -62,7 +106,8 @@ class InstrumentUpdate(SQLModel):
     """Validate supplied changes while preserving omitted instrument fields.
 
     Optional details and the customer association can be cleared with null.
-    The instrument type may be omitted but cannot explicitly be null.
+    Type and ownership cannot explicitly be null. Ownership/customer combinations
+    are validated against the locked current record by the update service.
     """
 
     model_config = {"extra": "forbid"}
@@ -73,6 +118,16 @@ class InstrumentUpdate(SQLModel):
     identification_number: str | None = None
     notes: str | None = None
     customer_id: int | None = Field(default=None, gt=0)
+    ownership: InstrumentOwnership | None = None
+
+    @field_validator("ownership")
+    @classmethod
+    def reject_null_ownership(
+        cls, value: InstrumentOwnership | None
+    ) -> InstrumentOwnership:
+        if value is None:
+            raise ValueError("Ownership cannot be null")
+        return value
 
     @field_validator("type")
     @classmethod
@@ -91,3 +146,22 @@ class InstrumentUpdate(SQLModel):
         if value is None:
             raise ValueError("Instrument type cannot be null")
         return value
+
+
+class InstrumentOwnershipRead(SQLModel):
+    """Expose minimal ownership facts without copying customer personal data."""
+
+    id: int
+    instrument_id: int
+    previous_ownership: InstrumentOwnership | None
+    previous_customer_id: int | None
+    ownership: InstrumentOwnership
+    customer_id: int | None
+    actor_id: int | None
+    source: str
+    recorded_at: AwareDatetime
+
+    @field_validator("recorded_at")
+    @classmethod
+    def normalize_timestamp(cls, value: datetime) -> datetime:
+        return value.astimezone(UTC)

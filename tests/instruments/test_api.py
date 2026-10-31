@@ -31,6 +31,7 @@ def test_register_instrument_without_customer(
         "identification_number": None,
         "notes": None,
         "customer_id": None,
+        "ownership": "unassigned",
     }
     instrument_session.get.assert_not_called()
     instrument_session.add.assert_called_once()
@@ -54,7 +55,7 @@ def test_register_instrument_with_existing_customer(client, instrument_session):
     }
     response = client.post("/api/v1/instruments", json=payload)
     assert response.status_code == 201
-    assert response.json() == {**payload, "id": 42}
+    assert response.json() == {**payload, "id": 42, "ownership": "customer"}
     instrument_session.get.assert_called_once_with(Customer, 7)
     saved = instrument_session.add.call_args.args[0]
     assert saved.customer_id == 7
@@ -151,6 +152,7 @@ def test_list_instruments_returns_schema_fields(client, mock_session):
             "identification_number": "LABEL-42",
             "notes": "Repaired top.",
             "customer_id": 7,
+            "ownership": "customer",
         },
         {
             "id": 2,
@@ -160,6 +162,7 @@ def test_list_instruments_returns_schema_fields(client, mock_session):
             "identification_number": None,
             "notes": None,
             "customer_id": None,
+            "ownership": "unassigned",
         },
     ]
     mock_session.exec.assert_called_once()
@@ -207,6 +210,7 @@ def test_get_instrument_returns_details_and_customer_id(
         "identification_number": "LABEL-42",
         "notes": "Repaired top.",
         "customer_id": customer_id,
+        "ownership": "customer" if customer_id else "unassigned",
     }
     mock_session.get.assert_called_once_with(Instrument, 42)
     mock_session.commit.assert_not_called()
@@ -266,11 +270,17 @@ def test_update_instrument_changes_details(
     }
     response = client.patch("/api/v1/instruments/42", json=payload)
     assert response.status_code == 200
-    assert response.json() == {"id": 42, "customer_id": 7, **payload}
+    assert response.json() == {
+        "id": 42,
+        "customer_id": 7,
+        "ownership": "customer",
+        **payload,
+    }
     mock_session.get.assert_called_once_with(Instrument, 42)
     mock_session.add.assert_called_once_with(update_instrument_target)
     mock_session.commit.assert_called_once()
-    mock_session.refresh.assert_called_once_with(update_instrument_target)
+    assert mock_session.refresh.call_args_list[0].kwargs == {"with_for_update": True}
+    mock_session.refresh.assert_called_with(update_instrument_target)
 
 
 def test_update_instrument_preserves_omitted_fields(
@@ -313,7 +323,12 @@ def test_update_instrument_clears_optional_fields(
     }
     response = client.patch("/api/v1/instruments/42", json=payload)
     assert response.status_code == 200
-    assert response.json() == {"id": 42, "type": "violin", **payload}
+    assert response.json() == {
+        "id": 42,
+        "type": "violin",
+        "ownership": "unassigned",
+        **payload,
+    }
     mock_session.get.assert_called_once_with(Instrument, 42)
     mock_session.commit.assert_called_once()
 
