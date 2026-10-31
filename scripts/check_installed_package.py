@@ -37,6 +37,9 @@ def main() -> None:
         "/health/ready",
         "/api/v1/instruments",
         "/api/v1/instruments/{instrument_id}",
+        "/api/v1/instruments/{instrument_id}/photos",
+        "/api/v1/instruments/{instrument_id}/photos/{photo_id}/restore",
+        "/api/v1/instruments/{instrument_id}/photos/{photo_id}/content",
     } <= routes
     assert not {"/auth/login", "/customers", "/instruments"} & routes
     assert app.openapi()["info"]["version"] == package.version
@@ -54,6 +57,14 @@ def main() -> None:
         ep for ep in package.entry_points if ep.name == "atelier-sessions-cleanup"
     )
     assert callable(cleanup.load())
+    photos_cleanup = next(
+        ep for ep in package.entry_points if ep.name == "atelier-photos-cleanup"
+    )
+    assert callable(photos_cleanup.load())
+    photos_purge = next(
+        ep for ep in package.entry_points if ep.name == "atelier-photos-purge"
+    )
+    assert callable(photos_purge.load())
     subprocess.run(
         [str(Path(sys.executable).parent / "atelier-api"), "--help"], check=True
     )

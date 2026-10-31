@@ -21,6 +21,7 @@ from atelier_api.instruments.customer_router import customer_instruments_router
 from atelier_api.instruments.qr import router as qr_router
 from atelier_api.instruments.qr import scan_router
 from atelier_api.instruments.router import instruments_router
+from atelier_api.photos.router import router as photos_router
 from atelier_api.repair_orders.router import router as repairs_router
 from atelier_api.settings import Settings, settings
 from atelier_api.version import software_version
@@ -35,14 +36,21 @@ class AuthenticationCacheHeaders(BaseHTTPMiddleware):
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
         response = await call_next(request)
-        if request.url.path.startswith(
-            (f"{API_V1_PREFIX}/auth/", f"{API_V1_PREFIX}/audit-events")
-        ) or response.status_code in {
-            401,
-            403,
-            429,
-        }:
-            response.headers["Cache-Control"] = "no-store"
+        if (
+            request.url.path.startswith(
+                (f"{API_V1_PREFIX}/auth/", f"{API_V1_PREFIX}/audit-events")
+            )
+            or "/photos" in request.url.path
+            or response.status_code
+            in {
+                401,
+                403,
+                429,
+            }
+        ):
+            response.headers["Cache-Control"] = (
+                "private, no-store" if "/photos" in request.url.path else "no-store"
+            )
             response.headers["Pragma"] = "no-cache"
         return response
 
@@ -134,6 +142,7 @@ def create_app(config: Settings | None = None) -> FastAPI:
         instruments_router,
         customer_instruments_router,
         repairs_router,
+        photos_router,
         qr_router,
     ):
         api_v1_router.include_router(router, dependencies=protected)

@@ -163,7 +163,7 @@ def delete_instrument(instrument_id: int, session: SessionDep) -> Response:
 
     Deletion is committed before returning an empty response. Repeating the
     request for the deleted identifier returns 404.
-    Instruments referenced by repair history are retained and return 409.
+    Instruments referenced by repair history or photographs return 409.
 
     Args:
         instrument_id: The identifier of the instrument to delete.

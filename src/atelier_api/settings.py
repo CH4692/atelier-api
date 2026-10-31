@@ -1,10 +1,12 @@
 """Load shared application and migration settings from the environment."""
 
+import re
 from ipaddress import ip_network
 from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic_core import PydanticCustomError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError, NoSuchModuleError
@@ -29,6 +31,13 @@ class Settings(BaseSettings):
         "http://127.0.0.1:8000",
     ]
     public_qr_base_url: str | None = None
+    r2_endpoint_url: str | None = Field(default=None, repr=False)
+    r2_access_key_id: SecretStr | None = Field(default=None, repr=False)
+    r2_secret_access_key: SecretStr | None = Field(default=None, repr=False)
+    r2_bucket_name: str | None = None
+
+    photo_soft_delete_retention_days: int = Field(default=30, ge=1, le=36500)
+    photo_auto_purge_enabled: bool = False
     audit_retention_days: int = Field(default=180, ge=1)
     session_idle_seconds: int = Field(default=1800, gt=0)
     session_absolute_seconds: int = Field(default=28800, gt=0)
@@ -37,6 +46,69 @@ class Settings(BaseSettings):
     login_window_seconds: int = Field(default=900, gt=0)
     trusted_proxy_ips: list[str] = []
     customer_portal_auth_enabled: bool = False
+
+    @field_validator("photo_soft_delete_retention_days", mode="before")
+    @classmethod
+    def validate_photo_retention_days(cls, value: object) -> object:
+        """Reject booleans masquerading as day counts."""
+        if isinstance(value, bool):
+            raise PydanticCustomError(
+                "photo_retention_days",
+                "Photo retention days must be a positive integer",
+            )
+        return value
+
+    @field_validator(
+        "r2_endpoint_url",
+        "r2_access_key_id",
+        "r2_secret_access_key",
+        "r2_bucket_name",
+        mode="before",
+    )
+    @classmethod
+    def empty_storage_value(cls, value: object) -> object:
+        """Treat empty optional environment variables as unconfigured."""
+        return None if value == "" else value
+
+    @property
+    def photo_storage_enabled(self) -> bool:
+        """Enable photo storage only with a complete validated configuration."""
+        return self.r2_endpoint_url is not None
+
+    @model_validator(mode="after")
+    def validate_photo_storage(self) -> Settings:
+        """Keep storage optional, but reject partial or insecure configurations."""
+        values = (
+            self.r2_endpoint_url,
+            self.r2_access_key_id,
+            self.r2_secret_access_key,
+            self.r2_bucket_name,
+        )
+        if all(value is None for value in values):
+            return self
+        if not all(values):
+            raise ValueError("All four R2 configuration variables are required")
+        endpoint = self.r2_endpoint_url or ""
+        self.validate_origins([endpoint])
+        parsed = urlsplit(endpoint)
+        if (
+            parsed.scheme != "https"
+            or not parsed.netloc.isascii()
+            or any(ord(char) <= 32 or char in '\\<>"' for char in endpoint)
+        ):
+            raise ValueError("R2_ENDPOINT_URL must be an explicit HTTPS origin")
+        try:
+            _ = parsed.port
+        except ValueError:
+            raise ValueError("Invalid R2 endpoint port") from None
+        if not re.fullmatch(
+            r"[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]", self.r2_bucket_name or ""
+        ):
+            raise ValueError("Invalid R2 bucket name")
+        for secret in (self.r2_access_key_id, self.r2_secret_access_key):
+            if secret is None or not secret.get_secret_value().strip():
+                raise ValueError("R2 credentials cannot be blank")
+        return self
 
     @property
     def api_documentation_enabled(self) -> bool:
