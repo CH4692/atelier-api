@@ -38,8 +38,11 @@ erfasst. API-Zeitstempel werden unabhängig von der Datenbank-Zeitzone in UTC
 ausgegeben. Validierungsfehler,
 404-Antworten und beliebige HTTP-Anfragen werden nicht pauschal protokolliert.
 
-Reparaturaufträge, Mietverträge, Vertragsabschluss und Rechnungen existieren noch
-nicht. Ihre fachlichen Aktionen müssen bei Einführung der jeweiligen Features
+Die Reparaturhistorie erfasst `repair_order.created`, `repair_order.archived`,
+`repair_order.restored` und `repair_document.created` atomar mit der jeweiligen
+Änderung. Arbeitsbeschreibungen, Dateinamen und Dokumentinhalte werden nicht
+kopiert. Die fachliche Reparatur-/Dokumentablage ist von der Audit-Aufbewahrung
+unabhängig. Mietverträge, Vertragsabschluss und Rechnungen existieren noch nicht. Ihre fachlichen Aktionen müssen bei Einführung der jeweiligen Features
 explizite Audit-Aktionen und Tests erhalten; dieses Modul erzeugt dafür keine
 fiktiven Vorgänge. Direkte SQL-Änderungen außerhalb der Anwendung werden nicht
 als fachliche Ereignisse erfasst.

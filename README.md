@@ -121,11 +121,9 @@ ID-Formate HTTP 422. Nur Administratoren und Mitarbeiter haben Zugriff.
 Der Endpunkt bildet aktuelle Instrumentzuordnungen ab, keine Eigentümerhistorie.
 Kundendetails und Instrumente werden in zwei Datenbankabfragen gelesen;
 gleichzeitige Änderungen können zwischen diesen Abfragen sichtbar werden.
-Reparatur-, Mietvertrags-, Rechnungs- und Dokumentmodelle existieren im aktuellen
-Stand noch nicht; dafür enthält diese Basisübersicht keine erfundenen Datensätze
-oder irreführenden leeren Historien. Die Übersicht ist bewusst auf vorhandene
-Kunden- und Instrumentdaten begrenzt. Die weiteren Bereiche werden später mit
-den jeweiligen Fachmodulen ergänzt.
+Die Kundenübersicht bleibt auf Kunden- und Instrumentdaten begrenzt. Reparaturarbeiten
+und Dokumente sind separat über die [Instrumenthistorie](docs/workshop-history.md)
+abrufbar. Mietvertrags- und Rechnungsmodelle existieren weiterhin noch nicht.
 
 ### Kunden archivieren und wiederherstellen
 
@@ -213,6 +211,17 @@ make db-check
 ```
 
 Ein Downgrade dieser Revision entfernt die Instrumenttabelle einschließlich ihrer Daten; die Kundentabelle bleibt erhalten.
+
+### Werkstatthistorie eines Instruments
+
+`GET /api/v1/instruments/{id}/history` verbindet Instrumentdetails mit
+chronologisch sortierten Reparatureinträgen, Arbeitsbeschreibungen und
+Dokumentmetadaten. Archivierte Reparaturen bleiben sichtbar; Dateien können
+über einen eigenen geschützten Download gelesen werden. Neue Arbeiten werden
+über `POST /api/v1/instruments/{id}/repair-orders` mit Beschreibung und
+Reparaturzeitpunkt erfasst. Instrumente mit Reparaturhistorie sind vor endgültiger
+Löschung geschützt (HTTP 409). API, Uploadgrenze, Archivierung und Migration
+beschreibt [Werkstatthistorie](docs/workshop-history.md).
 
 ### Instrumente eines Kunden anzeigen
 
