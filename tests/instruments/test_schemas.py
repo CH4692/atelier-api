@@ -34,6 +34,7 @@ def test_accepts_complete_instrument():
         "identification_number": "LABEL-42",
         "notes": "Repaired top; handwritten label.",
         "customer_id": 2,
+        "ownership": "customer",
     }
 
 

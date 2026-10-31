@@ -198,9 +198,10 @@ Das Feature `atelier_api.instruments` enthält das Tabellenmodell `Instrument` s
 | `year_of_manufacture` | Optionales ganzzahliges Baujahr von 1 bis 9999; unbekannt bleibt `null` |
 | `identification_number` | Optionale Serien- oder Identifikationsnummer, nicht global eindeutig |
 | `notes` | Optionaler Freitext |
-| `customer_id` | Optionale positive Kunden-ID; muss bei Speicherung auf einen existierenden Kunden verweisen |
+| `customer_id` | Optionale positive Eigentümer-ID; nur bei `ownership=customer`, verweist auf einen existierenden Kunden |
+| `ownership` | `customer`, `workshop` oder `unassigned`; siehe [Eigentum und Historie](docs/instrument-ownership.md) |
 
-Nur `type` ist für die Eingabe erforderlich. Unbekannte Eingabefelder werden abgewiesen. Die Baujahrprüfung beschränkt sich auf den Zahlenbereich; eine zusätzliche Regel gegen zukünftige Jahre besteht nicht. Eine fehlende Kundenzuordnung erlaubt die Erfassung von Werkstattbestand und anderen unzugeordneten Instrumenten. Ein Kunde kann mehrere Instrumente besitzen; `Instrument.customer` liefert die zugehörige Kundeninstanz. Eine Eigentums- oder Zuordnungshistorie ist noch nicht implementiert.
+Nur `type` ist für die Eingabe erforderlich. Unbekannte Eingabefelder werden abgewiesen. Die Baujahrprüfung beschränkt sich auf den Zahlenbereich; eine zusätzliche Regel gegen zukünftige Jahre besteht nicht. Ohne explizite Kategorie und ohne Kunden-ID wird `unassigned` gespeichert; Werkstatteigentum wird ausdrücklich mit `ownership=workshop` gekennzeichnet. Ein Kunde kann mehrere Instrumente besitzen; `Instrument.customer` liefert die zugehörige Kundeninstanz. Kategorie- und Besitzerwechsel werden atomar in einer eigenen [Eigentümerhistorie](docs/instrument-ownership.md) gespeichert.
 
 Die Datenbank erzwingt Typ, Baujahrbereich und gültige Kundenreferenzen. Beim Löschen eines Kunden wird die Referenz durch `ON DELETE SET NULL` aufgehoben; das Instrument und seine Detaildaten bleiben erhalten. Die Migration `a84c6e21f902` erstellt die Tabelle und den Index auf `customer_id`:
 
@@ -219,7 +220,7 @@ Ein Downgrade dieser Revision entfernt die Instrumenttabelle einschließlich ihr
 curl --fail-with-body -b /private/tmp/atelier-cookies.txt -H 'Origin: http://127.0.0.1:8000' -H 'X-CSRF-Protection: 1' http://127.0.0.1:8000/api/v1/customers/1/instruments
 ```
 
-Ein bestehender Kunde ohne Instrumente erhält `[]`; ein unbekannter Kunde erhält HTTP 404 mit `Customer not found`. Ein ungültiges ID-Format ergibt HTTP 422. Der Endpunkt erscheint unter `/docs` im Bereich `customers`. Die Liste bildet die **aktuelle Zuordnung** ab: Nach einem Kundenwechsel erscheint das Instrument beim neuen Kunden; nach Aufheben der Zuordnung bei keinem Kunden. Frühere Eigentümer oder Zuordnungen werden nicht historisiert. Es gibt noch keine Pagination oder festgelegte Sortierreihenfolge.
+Ein bestehender Kunde ohne Instrumente erhält `[]`; ein unbekannter Kunde erhält HTTP 404 mit `Customer not found`. Ein ungültiges ID-Format ergibt HTTP 422. Der Endpunkt erscheint unter `/docs` im Bereich `customers`. Die Liste bildet die **aktuelle Zuordnung** ab: Nach einem Kundenwechsel erscheint das Instrument beim neuen Kunden; nach Aufheben der Zuordnung bei keinem Kunden. Frühere Zuordnungen sind separat über `/api/v1/instruments/{id}/ownership-history` abrufbar. Es gibt noch keine Pagination oder festgelegte Sortierreihenfolge.
 
 ### Instrumente auflisten
 

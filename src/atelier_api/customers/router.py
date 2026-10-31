@@ -11,6 +11,7 @@ from atelier_api.audit.schemas import AuditDetails
 from atelier_api.audit.service import record_event
 from atelier_api.database import SessionDep
 from atelier_api.instruments.models import Instrument
+from atelier_api.instruments.ownership import set_ownership_actor
 from atelier_api.instruments.schemas import InstrumentRead
 from atelier_api.users.service import audit_customer_removal
 
@@ -243,6 +244,7 @@ def delete_customer(customer_id: int, session: SessionDep) -> Response:
             detail="Customer not found",
         )
     session.refresh(customer, with_for_update=True)
+    set_ownership_actor(session)
     audit_customer_removal(customer_id, session)
     instruments = session.exec(
         select(Instrument)

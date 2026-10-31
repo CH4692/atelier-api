@@ -1,11 +1,20 @@
 from pathlib import Path
 
 import pytest
+from alembic.autogenerate import compare_metadata
 from alembic.config import Config
+from alembic.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from sqlalchemy import inspect, text
+from sqlmodel import SQLModel
 
 pytestmark = pytest.mark.integration
+
+
+def test_migrations_match_registered_models(postgres_engine):
+    with postgres_engine.connect() as connection:
+        context = MigrationContext.configure(connection)
+        assert compare_metadata(context, SQLModel.metadata) == []
 
 
 def test_migrations_create_customer_table_and_reach_head(postgres_engine):
@@ -54,6 +63,7 @@ def test_migration_creates_instrument_constraints_and_customer_reference(
         "identification_number",
         "notes",
         "customer_id",
+        "ownership",
     }
     assert inspector.get_pk_constraint("instrument")["constrained_columns"] == ["id"]
     (foreign_key,) = inspector.get_foreign_keys("instrument")
@@ -65,6 +75,8 @@ def test_migration_creates_instrument_constraints_and_customer_reference(
         for constraint in inspector.get_check_constraints("instrument")
     } == {
         "ck_instrument_type",
+        "ck_instrument_ownership",
+        "ck_instrument_owner_category",
         "ck_instrument_year_of_manufacture",
     }
     assert any(

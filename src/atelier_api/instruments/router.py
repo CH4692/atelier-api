@@ -1,15 +1,24 @@
 """Register, retrieve, update and delete instruments."""
 
-from fastapi import APIRouter, HTTPException, Response, status
-from sqlmodel import select
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Query, Response, status
+from sqlmodel import col, select
 
 from atelier_api.audit.models import AuditAction, AuditResource
 from atelier_api.audit.service import record_event
 from atelier_api.customers.models import Customer
 from atelier_api.database import SessionDep
 
-from .models import Instrument
-from .schemas import InstrumentCreate, InstrumentRead, InstrumentUpdate
+from .models import Instrument, InstrumentOwnershipEvent
+from .ownership import ownership_changes, set_ownership_actor
+from .schemas import (
+    InstrumentCreate,
+    InstrumentOwnership,
+    InstrumentOwnershipRead,
+    InstrumentRead,
+    InstrumentUpdate,
+)
 
 instruments_router = APIRouter(prefix="/instruments", tags=["instruments"])
 
@@ -20,14 +29,52 @@ instruments_router = APIRouter(prefix="/instruments", tags=["instruments"])
     response_model=list[InstrumentRead],
     responses={503: {"description": "Database unavailable"}},
 )
-def get_instruments(session: SessionDep) -> list[InstrumentRead]:
+def get_instruments(
+    session: SessionDep, ownership: InstrumentOwnership | None = None
+) -> list[InstrumentRead]:
     """Return all instruments, including records without a customer.
 
     An empty database returns an empty list. Results are not paginated and
     have no explicitly defined sort order.
     """
-    instruments = session.exec(select(Instrument)).all()
+    statement = select(Instrument)
+    if ownership is not None:
+        statement = statement.where(Instrument.ownership == ownership)
+    instruments = session.exec(statement).all()
     return [InstrumentRead.model_validate(instrument) for instrument in instruments]
+
+
+@instruments_router.get(
+    "/{instrument_id}/ownership-history",
+    summary="List an instrument's ownership history",
+    response_model=list[InstrumentOwnershipRead],
+    responses={404: {"description": "Instrument and ownership history not found"}},
+)
+def get_ownership_history(
+    instrument_id: int,
+    session: SessionDep,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+) -> list[InstrumentOwnershipRead]:
+    """Return newest facts first, including retained history of deleted instruments.
+
+    A migration entry is a snapshot at migration time, not a claimed purchase
+    date. Historical customer IDs may refer to subsequently deleted customers.
+    """
+    statement = select(InstrumentOwnershipEvent).where(
+        InstrumentOwnershipEvent.instrument_id == instrument_id
+    )
+    if (
+        session.get(Instrument, instrument_id) is None
+        and session.exec(statement.limit(1)).first() is None
+    ):
+        raise HTTPException(404, "Instrument not found")
+    events = session.exec(
+        statement.order_by(col(InstrumentOwnershipEvent.id).desc())
+        .offset(offset)
+        .limit(limit)
+    ).all()
+    return [InstrumentOwnershipRead.model_validate(event) for event in events]
 
 
 @instruments_router.get(
@@ -137,6 +184,7 @@ def create_instrument(
                 detail="Customer not found",
             )
     db_instrument = Instrument.model_validate(instrument)
+    set_ownership_actor(session)
     session.add(db_instrument)
     session.flush()
     record_event(
@@ -186,7 +234,11 @@ def update_instrument(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Instrument not found",
         )
-    changes = instrument_update.model_dump(exclude_unset=True)
+    session.refresh(instrument, with_for_update=True)
+    try:
+        changes = ownership_changes(instrument, instrument_update)
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from None
     if "customer_id" in changes and instrument_update.customer_id is not None:
         customer = session.get(Customer, instrument_update.customer_id)
         if customer is None:
@@ -195,6 +247,7 @@ def update_instrument(
                 detail="Customer not found",
             )
     if changes:
+        set_ownership_actor(session)
         instrument.sqlmodel_update(changes)
         session.add(instrument)
         record_event(

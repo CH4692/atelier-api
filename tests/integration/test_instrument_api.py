@@ -33,7 +33,7 @@ def test_register_instrument_persists_details_and_customer(
     created = response.json()
     assert isinstance(created["id"], int)
     assert created["id"] > 0
-    assert created == {**payload, "id": created["id"]}
+    assert created == {**payload, "id": created["id"], "ownership": "customer"}
     with Session(
         bind=db_connection, join_transaction_mode="create_savepoint"
     ) as session:
@@ -238,6 +238,7 @@ def test_update_instrument_persists_details_and_customer_changes(
     response = postgres_client.patch(path, json=cleared)
     assert response.status_code == 200
     expected.update(cleared)
+    expected["ownership"] = "unassigned"
     assert response.json() == expected
     assert postgres_client.get(path).json() == expected
     with Session(
@@ -251,6 +252,7 @@ def test_update_instrument_persists_details_and_customer_changes(
     response = postgres_client.patch(path, json={"customer_id": customer_ids[0]})
     assert response.status_code == 200
     expected["customer_id"] = customer_ids[0]
+    expected["ownership"] = "customer"
     assert response.json() == expected
     assert postgres_client.get(path).json() == expected
 
