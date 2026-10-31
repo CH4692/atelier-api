@@ -21,6 +21,32 @@ os.environ["PHOTO_AUTO_PURGE_ENABLED"] = "false"
 os.environ["PHOTO_SOFT_DELETE_RETENTION_DAYS"] = "30"
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--require-postgres",
+        action="store_true",
+        help="Fail instead of skipping when TEST_DATABASE_URL is missing",
+    )
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Classify current paths without moving tests or changing selection defaults."""
+    for item in items:
+        parts = item.path.relative_to(item.config.rootpath).parts
+        if parts[:2] == ("tests", "integration"):
+            item.add_marker(pytest.mark.integration)
+        elif item.get_closest_marker("external") is None:
+            if (
+                isinstance(item, pytest.Function) and "client" in item.fixturenames
+            ) or item.path.name in {
+                "test_main.py",
+                "test_multipart_limits.py",
+            }:
+                item.add_marker(pytest.mark.api)
+            else:
+                item.add_marker(pytest.mark.unit)
+
+
 def pytest_configure(config: pytest.Config) -> None:
     """Load local database settings before test modules import the application.
 
@@ -32,6 +58,12 @@ def pytest_configure(config: pytest.Config) -> None:
     os.environ.setdefault("DATABASE_URL", "sqlite://")
     # Production-config fixtures must not inherit a local HTTP QR origin.
     os.environ.pop("PUBLIC_QR_BASE_URL", None)
+    if config.getoption(
+        "require_postgres", default=False
+    ) is True and not os.environ.get("TEST_DATABASE_URL"):
+        raise pytest.UsageError(
+            "TEST_DATABASE_URL is required; configure a dedicated PostgreSQL _test database"
+        )
 
 
 @pytest.fixture

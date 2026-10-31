@@ -74,6 +74,7 @@ def photo_events(db_connection):
     "format,mime",
     [("JPEG", "image/jpeg"), ("PNG", "image/png"), ("WEBP", "image/webp")],
 )
+@pytest.mark.e2e
 def test_photo_upload_and_private_retrieval(
     photo_setup, db_connection, accounts, format, mime
 ):
@@ -245,6 +246,7 @@ def test_cross_instrument_access_and_missing_photo(photo_setup):
     assert not storage.downloads
 
 
+@pytest.mark.e2e
 def test_admin_soft_deletion_is_idempotent_and_preserves_evidence(
     photo_setup, db_connection, accounts
 ):

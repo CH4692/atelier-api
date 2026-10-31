@@ -2,14 +2,18 @@ import pytest
 from sqlmodel import Session
 
 from atelier_api.instruments.models import Instrument
+from tests.integration.auth_helpers import sign_in
 
 pytestmark = pytest.mark.integration
 
 
-def test_instrument_management_lifecycle(postgres_client, db_connection):
+@pytest.mark.e2e
+def test_instrument_management_lifecycle(auth_factory, db_connection):
+    client = auth_factory()
+    assert sign_in(client, "employee").status_code == 200
     customers = []
     for name in ("Jon", "Maria"):
-        response = postgres_client.post(
+        response = client.post(
             "/api/v1/customers",
             json={
                 "first_name": name,
@@ -22,7 +26,7 @@ def test_instrument_management_lifecycle(postgres_client, db_connection):
     first_customer, next_customer = customers
     first_list = f"/api/v1/customers/{first_customer['id']}/instruments"
     next_list = f"/api/v1/customers/{next_customer['id']}/instruments"
-    response = postgres_client.post(
+    response = client.post(
         "/api/v1/instruments",
         json={
             "type": "violin",
@@ -39,15 +43,15 @@ def test_instrument_management_lifecycle(postgres_client, db_connection):
     assert created["id"] > 0
     path = f"/api/v1/instruments/{created['id']}"
     for list_path in ("/api/v1/instruments", first_list):
-        response = postgres_client.get(list_path)
+        response = client.get(list_path)
         assert response.status_code == 200
         assert response.json() == [created]
-    response = postgres_client.get(path)
+    response = client.get(path)
     assert response.status_code == 200
     assert response.json() == created
 
     changes = {"notes": "Transferred instrument.", "customer_id": next_customer["id"]}
-    response = postgres_client.patch(path, json=changes)
+    response = client.patch(path, json=changes)
     assert response.status_code == 200
     updated = {**created, **changes}
     assert response.json() == updated
@@ -59,17 +63,17 @@ def test_instrument_management_lifecycle(postgres_client, db_connection):
         assert stored.model_dump(mode="json", exclude={"public_id"}) == updated
         assert stored.customer is not None
         assert stored.customer.id == next_customer["id"]
-    assert postgres_client.get(first_list).json() == []
-    assert postgres_client.get(next_list).json() == [updated]
+    assert client.get(first_list).json() == []
+    assert client.get(next_list).json() == [updated]
 
-    response = postgres_client.patch(path, json={"type": "piano"})
+    response = client.patch(path, json={"type": "piano"})
     assert response.status_code == 422
-    assert postgres_client.get(path).json() == updated
-    response = postgres_client.delete(path)
+    assert client.get(path).json() == updated
+    response = client.delete(path)
     assert response.status_code == 204
     assert response.content == b""
-    assert postgres_client.get("/api/v1/instruments").json() == []
-    assert postgres_client.get(next_list).json() == []
+    assert client.get("/api/v1/instruments").json() == []
+    assert client.get(next_list).json() == []
     with Session(
         bind=db_connection, join_transaction_mode="create_savepoint"
     ) as session:
@@ -79,11 +83,8 @@ def test_instrument_management_lifecycle(postgres_client, db_connection):
         ("PATCH", {"notes": "Already deleted."}),
         ("DELETE", None),
     ]:
-        response = postgres_client.request(method, path, json=payload)
+        response = client.request(method, path, json=payload)
         assert response.status_code == 404
         assert response.json() == {"detail": "Instrument not found"}
     for customer in customers:
-        assert (
-            postgres_client.get(f"/api/v1/customers/{customer['id']}").status_code
-            == 200
-        )
+        assert client.get(f"/api/v1/customers/{customer['id']}").status_code == 200

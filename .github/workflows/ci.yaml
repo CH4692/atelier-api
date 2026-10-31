@@ -7,16 +7,36 @@ on:
   push:
     branches:
       - main
+  merge_group:
+    types:
+      - checks_requested
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  DATABASE_URL: sqlite://
+  R2_ENDPOINT_URL: ""
+  R2_ACCESS_KEY_ID: ""
+  R2_SECRET_ACCESS_KEY: ""
+  R2_BUCKET_NAME: ""
+  PHOTO_AUTO_PURGE_ENABLED: "false"
 
 jobs:
   package-installation:
     name: Wheel installation
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
@@ -44,11 +64,13 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
@@ -69,11 +91,13 @@ jobs:
 
   typecheck:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
@@ -89,8 +113,47 @@ jobs:
       - name: Run Typecheck
         run: make typecheck
 
+  unit-api:
+    name: Unit and API tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install
+
+      - name: Install project
+        run: uv sync --locked --dev
+
+      - name: Run unit and lightweight API tests
+        run: make test-fast PYTEST_ARGS="--durations=20 --tb=short --junitxml=reports/unit-api.raw.xml"
+
+      - name: Summarize and sanitize test report
+        if: always()
+        run: uv run python scripts/report_tests.py reports/unit-api.raw.xml reports/unit-api.xml "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload sanitized test report
+        if: always() && hashFiles('reports/unit-api.xml') != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: unit-api-results
+          path: reports/unit-api.xml
+          retention-days: 7
+          if-no-files-found: error
+
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     services:
       postgres:
@@ -116,6 +179,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
@@ -128,15 +192,28 @@ jobs:
       - name: Install project
         run: uv sync --locked --dev
 
-      - name: Apply database migrations
-        run: make db-migrate
+      # The session fixture migrates one disposable database per worker.
+      # This includes every integration test and the marked E2E workflows.
+      - name: Run all PostgreSQL integration and E2E tests
+        run: make test-integration TEST_WORKERS=2 PYTEST_ARGS="--durations=20 --tb=short --junitxml=reports/integration.raw.xml"
 
-      - name: Run all tests including PostgreSQL integration
-        run: make test
+      - name: Summarize and sanitize test report
+        if: always()
+        run: uv run python scripts/report_tests.py reports/integration.raw.xml reports/integration.xml "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload sanitized test report
+        if: always() && hashFiles('reports/integration.xml') != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: postgres-integration-e2e-results
+          path: reports/integration.xml
+          retention-days: 7
+          if-no-files-found: error
 
   migrations:
     name: Database Migrations
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     services:
       postgres:
         image: postgres:17
@@ -160,6 +237,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
@@ -177,3 +255,30 @@ jobs:
 
       - name: Check database model consistency
         run: make db-check
+
+      - name: Verify supported downgrade and upgrade round trip
+        run: |
+          uv run alembic downgrade -1
+          make db-migrate
+          make db-check
+
+  required:
+    name: Required CI
+    if: always()
+    needs: [lint, typecheck, unit-api, test, migrations, package-installation]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require every verification job to succeed
+        env:
+          NEEDS_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PYTHON'
+          import json
+          import os
+          results = json.loads(os.environ["NEEDS_RESULTS"])
+          failed = [name for name, job in results.items() if job["result"] != "success"]
+          if failed:
+              raise SystemExit("Required verification did not succeed: " + ", ".join(failed))
+          print("All required quality, unit/API, PostgreSQL/E2E, migration and package checks passed.")
+          PYTHON

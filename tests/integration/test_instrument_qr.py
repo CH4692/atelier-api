@@ -75,7 +75,11 @@ def test_qr_target_is_stable_and_host_headers_are_ignored(auth_factory, db_conne
     "role,expected", [(None, 401), ("customer", 403), ("employee", 404), ("admin", 404)]
 )
 @pytest.mark.parametrize(
-    "path", ["/i/" + str(uuid4()), "/api/v1/instruments/999999/qr-code.svg"]
+    "path",
+    [
+        "/i/9f8d65ec-e35b-4f33-9d83-3840f0f0b888",
+        "/api/v1/instruments/999999/qr-code.svg",
+    ],
 )
 def test_qr_requires_workshop_access(auth_factory, role, expected, path):
     client = auth_factory(customer_portal_auth_enabled=True)

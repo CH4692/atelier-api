@@ -946,7 +946,7 @@ Nach `uv sync --locked --dev` lassen sich alle Tests mit einem Befehl ausführen
 
 ```bash
 make test
-# Gleichwertig: uv run pytest
+# Gleichwertig: uv run pytest --require-postgres -m "not external"
 ```
 
 pytest lädt `.env` automatisch vor dem Anwendungsimport. Exportierte Variablen haben Vorrang, sodass die CI ihre Container-Verbindungen verwendet. Lokal werden die Neon-Verbindungen aus `.env` genutzt. Die bisherigen fachlichen API-Tests isolieren die Anmeldung über einen Test-Override; die Authentifizierungstests nutzen eine eigene App ohne diesen Override. Die isolierten API-Tests verwenden gemockte Sessions; echte Datenbankoperationen laufen über `TEST_DATABASE_URL`. Nur bei vollständig fehlender `DATABASE_URL` in Umgebung und `.env` gibt es noch eine SQLite-Adresse zur Initialisierung. Vorhandene Dependency-Overrides werden nach jedem Test wiederhergestellt.
@@ -973,7 +973,7 @@ Die in `.env` angegebene Testdatenbank muss bereits existieren. Die Integrations
 make test-instruments
 ```
 
-Der Befehl führt die API- und Schema-Tests unter `tests/instruments/` sowie die PostgreSQL-Instrument- und Zuordnungstests aus. Die Neon-Testverbindung wird wie bei `make test` aus `.env` geladen. Die CI verwendet weiterhin `make test` und nimmt neue Testdateien automatisch mit auf.
+Der Befehl führt die API- und Schema-Tests unter `tests/instruments/` sowie die PostgreSQL-Instrument- und Zuordnungstests aus. Die Neon-Testverbindung wird wie bei `make test` aus `.env` geladen. Die CI führt schnelle Tests und die vollständige PostgreSQL-/E2E-Suite in getrennten Jobs aus und nimmt neue Testdateien automatisch mit auf.
 
 | Abnahmekriterium | Vorhandene Testabdeckung |
 | --- | --- |
@@ -996,17 +996,21 @@ Der Befehl führt die API- und Schema-Tests unter `tests/instruments/` sowie die
 uv run pytest tests/integration -v
 ```
 
-Ohne `TEST_DATABASE_URL` werden nur die Integrationstests mit einem Hinweis übersprungen. Eine gesetzte, aber ungeeignete URL oder nicht erreichbare Testdatenbank führt zu einem Fehler. `TEST_DATABASE_URL` wird ausschließlich von den Test-Fixtures gelesen. Die allgemeine `DATABASE_URL` wird ebenfalls aus `.env` geladen; außerhalb von pytest bleibt sie für die Anwendung erforderlich. Bei einer konfigurierten, aber nicht erreichbaren Neon-Testdatenbank wird ein Fehler gemeldet; es gibt keinen automatischen Wechsel auf eine lokale Datenbank.
+Die vollständigen Make-Befehle scheitern ohne `TEST_DATABASE_URL`; nur ein direkter interaktiver `pytest`-Aufruf behält das bisherige Überspringen fehlender Integrationstest-Voraussetzungen bei. Eine gesetzte, aber ungeeignete URL oder nicht erreichbare Testdatenbank führt zu einem Fehler. `TEST_DATABASE_URL` wird ausschließlich von den Test-Fixtures gelesen. Die allgemeine `DATABASE_URL` wird ebenfalls aus `.env` geladen; außerhalb von pytest bleibt sie für die Anwendung erforderlich. Bei einer konfigurierten, aber nicht erreichbaren Neon-Testdatenbank wird ein Fehler gemeldet; es gibt keinen automatischen Wechsel auf eine lokale Datenbank.
 
 Jeder Testlauf erzeugt ein Schema mit zufälligem Namen und wendet darin `alembic upgrade head` auf ein leeres Schema an; `create_all()` wird nicht verwendet. Geprüft werden der erreichte Migrationsstand, die Kundentabelle, Health-Readiness sowie der vollständige Ablauf Anlegen → Auflisten/Abrufen → Ändern → Löschen. Frische Sessions bestätigen die gespeicherten Daten; zusätzliche Fälle prüfen optionale Telefonnummern, ungültige Eingaben und fehlende Kunden.
 
-Jeder API-Aufruf erhält eine eigene Session mit Savepoint innerhalb einer äußeren Testtransaktion. Am Testende wird die äußere Transaktion zurückgerollt, auch wenn der Endpunkt `session.commit()` aufgerufen hat. Eine zusätzliche Prüfung bestätigt nach jedem Test, dass keine Kunden- oder Instrumentdaten zurückbleiben. Am Ende des Testlaufs wird ausschließlich das eigens erzeugte Schema entfernt. Die Suite ist für sequenzielle Ausführung eingerichtet.
+Jeder API-Aufruf erhält eine eigene Session mit Savepoint innerhalb einer äußeren Testtransaktion. Am Testende wird die äußere Transaktion zurückgerollt, auch wenn der Endpunkt `session.commit()` aufgerufen hat. Eine zusätzliche Prüfung bestätigt nach jedem Test, dass keine Kunden- oder Instrumentdaten zurückbleiben. Am Ende des Testlaufs wird ausschließlich das eigens erzeugte Schema entfernt. Serielle Ausführung bleibt der lokale Standard; mit `TEST_WORKERS=2` erhält jeder xdist-Worker eine eigene kurzlebige Datenbank.
 
 Die Tests in `tests/instruments/test_customer_api.py` und `tests/integration/test_customer_instruments.py` prüfen die Kundeninstrumentliste, einschließlich Filterung nach Kunde, unzugeordneter Instrumente, leerer Ergebnisse, unbekannter Kunden und Zuordnungswechsel. Die übrigen Tests unter `tests/instruments/` validieren Instrument-Schemas sowie die POST-, GET-, PATCH- und DELETE-Endpunkte einschließlich leerer Listen, Validierungsfehlern und unbekannten Kunden. `tests/integration/test_instrument_api.py` prüft Registrierung, Änderung und Löschung über HTTP, das erneute Lesen aus PostgreSQL über eine frische Session sowie den Erhalt anderer Instrumente und der Kundenakte nach einer Instrumentlöschung. `tests/integration/test_instruments.py` prüft die Speicherung aller Instrumentfelder, die Kundenzuordnung, mehrere Instrumente pro Kunde, ungültige Fremdschlüssel und Datenbankwerte sowie den Erhalt von Instrumenten beim Löschen eines Kunden. Nach jedem Test wird zusätzlich geprüft, dass keine Instrumentdaten zurückbleiben.
 
 | Make-Befehl | Direkter Aufruf |
 | --- | --- |
-| `make test` | `uv run pytest` |
+| `make test` | Vollständige Offline-Suite mit `--require-postgres` |
+| `make test-fast` | Schnelle Tests ohne PostgreSQL; keine vollständige Prüfung |
+| `make test-integration` | Alle PostgreSQL- und E2E-Tests |
+| `make test-e2e` | Kritische authentifizierte Geschäftsabläufe |
+| `make check` | Ruff, Formatprüfung und mypy |
 | `make test-instruments` | Instrument-API-, Schema- und PostgreSQL-Tests |
 | `make lint` | `uv run ruff check .` |
 | `make lint-fix` | `uv run ruff check . --fix` (ändert Dateien) |
@@ -1021,7 +1025,7 @@ CORS und instanzübergreifenden Rate-Limits. Sitzungen und Login-Zähler werden
 wie Werkstattdaten je Test zurückgerollt und auf vollständige Bereinigung geprüft.
 Ein gezielter Lauf: `uv run pytest tests/integration/test_auth.py`.
 
-Die GitHub-Actions-CI startet PostgreSQL 17 für Tests und Migrationsprüfungen und wendet Migrationen vor den Tests an. Der Test-Job setzt `TEST_DATABASE_URL` und führt mit `make test` alle Tests einschließlich der Integrationstests aus; deren Fixtures prüfen zusätzlich Migrationen in einem leeren Schema. Ein eigener Job baut und installiert das Wheel in einer frischen Umgebung und prüft die Anwendung außerhalb des Quellcodeverzeichnisses.
+Die GitHub-Actions-CI startet PostgreSQL 17 für Integrations-/E2E-Tests und Migrationsprüfungen. Jeder Test-Worker erhält eine eigene migrierte Datenbank; schnelle Tests laufen separat. Ein eigener Job baut und installiert das Wheel in einer frischen Umgebung. `Required CI` schlägt fehl, wenn eine Teilprüfung fehlschlägt, abgebrochen oder übersprungen wird. Die vollständige Strategie, lokale PostgreSQL-Einrichtung, Parallelisierung und erforderlichen GitHub-Statuschecks stehen in [Testing and required CI](docs/testing.md).
 
 ### 8.7 Paket bauen
 

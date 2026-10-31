@@ -220,3 +220,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local/CI test reports (only sanitized copies are uploaded by CI).
+reports/
