@@ -21,6 +21,18 @@ class Instrument(InstrumentBase, table=True):
 
     __table_args__ = (
         CheckConstraint(
+            "body_length_mm > 0 AND body_length_mm < 'Infinity'::double precision",
+            name="ck_instrument_body_length",
+        ),
+        CheckConstraint(
+            "bow_weight_g > 0 AND bow_weight_g < 'Infinity'::double precision",
+            name="ck_instrument_bow_weight",
+        ),
+        CheckConstraint(
+            "(type = 'bow' AND body_length_mm IS NULL) OR (type <> 'bow' AND bow_weight_g IS NULL)",
+            name="ck_instrument_category_attributes",
+        ),
+        CheckConstraint(
             "customer_id IS NULL OR ownership = 'customer'",
             name="ck_instrument_owner_category",
         ),

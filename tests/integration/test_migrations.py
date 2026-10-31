@@ -64,6 +64,8 @@ def test_migration_creates_instrument_constraints_and_customer_reference(
         "notes",
         "customer_id",
         "ownership",
+        "body_length_mm",
+        "bow_weight_g",
     }
     assert inspector.get_pk_constraint("instrument")["constrained_columns"] == ["id"]
     (foreign_key,) = inspector.get_foreign_keys("instrument")
@@ -75,6 +77,9 @@ def test_migration_creates_instrument_constraints_and_customer_reference(
         for constraint in inspector.get_check_constraints("instrument")
     } == {
         "ck_instrument_type",
+        "ck_instrument_body_length",
+        "ck_instrument_bow_weight",
+        "ck_instrument_category_attributes",
         "ck_instrument_ownership",
         "ck_instrument_owner_category",
         "ck_instrument_year_of_manufacture",

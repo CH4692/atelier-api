@@ -33,7 +33,13 @@ def test_register_instrument_persists_details_and_customer(
     created = response.json()
     assert isinstance(created["id"], int)
     assert created["id"] > 0
-    assert created == {**payload, "id": created["id"], "ownership": "customer"}
+    assert created == {
+        **payload,
+        "id": created["id"],
+        "ownership": "customer",
+        "body_length_mm": None,
+        "bow_weight_g": None,
+    }
     with Session(
         bind=db_connection, join_transaction_mode="create_savepoint"
     ) as session:

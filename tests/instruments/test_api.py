@@ -32,6 +32,8 @@ def test_register_instrument_without_customer(
         "notes": None,
         "customer_id": None,
         "ownership": "unassigned",
+        "body_length_mm": None,
+        "bow_weight_g": None,
     }
     instrument_session.get.assert_not_called()
     instrument_session.add.assert_called_once()
@@ -55,7 +57,13 @@ def test_register_instrument_with_existing_customer(client, instrument_session):
     }
     response = client.post("/api/v1/instruments", json=payload)
     assert response.status_code == 201
-    assert response.json() == {**payload, "id": 42, "ownership": "customer"}
+    assert response.json() == {
+        **payload,
+        "id": 42,
+        "ownership": "customer",
+        "body_length_mm": None,
+        "bow_weight_g": None,
+    }
     instrument_session.get.assert_called_once_with(Customer, 7)
     saved = instrument_session.add.call_args.args[0]
     assert saved.customer_id == 7
@@ -153,6 +161,8 @@ def test_list_instruments_returns_schema_fields(client, mock_session):
             "notes": "Repaired top.",
             "customer_id": 7,
             "ownership": "customer",
+            "body_length_mm": None,
+            "bow_weight_g": None,
         },
         {
             "id": 2,
@@ -163,6 +173,8 @@ def test_list_instruments_returns_schema_fields(client, mock_session):
             "notes": None,
             "customer_id": None,
             "ownership": "unassigned",
+            "body_length_mm": None,
+            "bow_weight_g": None,
         },
     ]
     mock_session.exec.assert_called_once()
@@ -211,6 +223,8 @@ def test_get_instrument_returns_details_and_customer_id(
         "notes": "Repaired top.",
         "customer_id": customer_id,
         "ownership": "customer" if customer_id else "unassigned",
+        "body_length_mm": None,
+        "bow_weight_g": None,
     }
     mock_session.get.assert_called_once_with(Instrument, 42)
     mock_session.commit.assert_not_called()
@@ -274,6 +288,8 @@ def test_update_instrument_changes_details(
         "id": 42,
         "customer_id": 7,
         "ownership": "customer",
+        "body_length_mm": None,
+        "bow_weight_g": None,
         **payload,
     }
     mock_session.get.assert_called_once_with(Instrument, 42)
@@ -327,6 +343,8 @@ def test_update_instrument_clears_optional_fields(
         "id": 42,
         "type": "violin",
         "ownership": "unassigned",
+        "body_length_mm": None,
+        "bow_weight_g": None,
         **payload,
     }
     mock_session.get.assert_called_once_with(Instrument, 42)

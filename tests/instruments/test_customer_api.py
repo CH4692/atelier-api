@@ -33,6 +33,8 @@ def test_customer_instruments_return_instrument_schema(client, mock_session):
             "notes": "Repaired top.",
             "customer_id": 7,
             "ownership": "customer",
+            "body_length_mm": None,
+            "bow_weight_g": None,
         }
     ]
     mock_session.get.assert_called_once_with(Customer, 7)

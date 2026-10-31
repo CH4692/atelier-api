@@ -193,7 +193,9 @@ Das Feature `atelier_api.instruments` enthält das Tabellenmodell `Instrument` s
 | Feld | Bedeutung / Validierung |
 | --- | --- |
 | `id` | Von der Datenbank erzeugte Ganzzahl; gehört zur Ausgabe, nicht zur Eingabe |
-| `type` | Pflichtfeld: `violin`, `viola`, `cello` oder `double_bass` |
+| `type` | Pflichtfeld: `violin`, `viola`, `cello`, `double_bass` oder `bow` |
+| `body_length_mm` | Optionale positive endliche Korpuslänge in mm, nur für Streichinstrumente |
+| `bow_weight_g` | Optionales positives endliches Bogengewicht in g, nur für Bögen |
 | `maker` | Optionaler Hersteller-/Geigenbauername |
 | `year_of_manufacture` | Optionales ganzzahliges Baujahr von 1 bis 9999; unbekannt bleibt `null` |
 | `identification_number` | Optionale Serien- oder Identifikationsnummer, nicht global eindeutig |
@@ -222,9 +224,12 @@ curl --fail-with-body -b /private/tmp/atelier-cookies.txt -H 'Origin: http://127
 
 Ein bestehender Kunde ohne Instrumente erhält `[]`; ein unbekannter Kunde erhält HTTP 404 mit `Customer not found`. Ein ungültiges ID-Format ergibt HTTP 422. Der Endpunkt erscheint unter `/docs` im Bereich `customers`. Die Liste bildet die **aktuelle Zuordnung** ab: Nach einem Kundenwechsel erscheint das Instrument beim neuen Kunden; nach Aufheben der Zuordnung bei keinem Kunden. Frühere Zuordnungen sind separat über `/api/v1/instruments/{id}/ownership-history` abrufbar. Es gibt noch keine Pagination oder festgelegte Sortierreihenfolge.
 
+Details, optionale Messwerte, Typwechsel und Migration sind in
+[Instrumentkategorien](docs/instrument-categories.md) beschrieben.
+
 ### Instrumente auflisten
 
-`GET /api/v1/instruments` liefert HTTP 200 und eine JSON-Liste mit dem Antwortschema `list[InstrumentRead]`. Jeder Eintrag enthält ID, Typ, Hersteller, Baujahr, Identifikationsnummer, Notizen und die optionale Kunden-ID. Unzugeordnete Instrumente werden ebenfalls angezeigt. Sind keine Instrumente vorhanden, ist die Antwort `[]`. Eine Sortierreihenfolge oder Pagination ist noch nicht festgelegt. Der Endpunkt erscheint unter `/docs`.
+`GET /api/v1/instruments` unterstützt die optionalen UND-verknüpften Filter `type` (z. B. `bow`) und `ownership` (z. B. `workshop`) und liefert HTTP 200 und eine JSON-Liste mit dem Antwortschema `list[InstrumentRead]`. Jeder Eintrag enthält ID, Typ, Hersteller, Baujahr, Identifikationsnummer, Notizen und die optionale Kunden-ID. Unzugeordnete Instrumente werden ebenfalls angezeigt. Sind keine Instrumente vorhanden, ist die Antwort `[]`. Eine Sortierreihenfolge oder Pagination ist noch nicht festgelegt. Der Endpunkt erscheint unter `/docs`.
 
 ```bash
 curl --fail -b /private/tmp/atelier-cookies.txt -H 'Origin: http://127.0.0.1:8000' -H 'X-CSRF-Protection: 1' http://127.0.0.1:8000/api/v1/instruments
