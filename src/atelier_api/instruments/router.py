@@ -3,6 +3,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
+from sqlalchemy import func
 from sqlmodel import col, select
 
 from atelier_api.audit.models import AuditAction, AuditResource
@@ -17,6 +18,8 @@ from .schemas import (
     InstrumentOwnership,
     InstrumentOwnershipRead,
     InstrumentRead,
+    InstrumentSortField,
+    InstrumentSortOrder,
     InstrumentType,
     InstrumentUpdate,
     validate_category_attributes,
@@ -29,24 +32,58 @@ instruments_router = APIRouter(prefix="/instruments", tags=["instruments"])
     "",
     summary="List registered instruments",
     response_model=list[InstrumentRead],
-    responses={503: {"description": "Database unavailable"}},
+    responses={
+        200: {
+            "headers": {
+                "X-Total-Count": {
+                    "description": "Number of matching instruments before pagination",
+                    "schema": {"type": "integer", "minimum": 0},
+                }
+            }
+        },
+        503: {"description": "Database unavailable"},
+    },
 )
 def get_instruments(
     session: SessionDep,
+    response: Response,
     ownership: InstrumentOwnership | None = None,
     type: InstrumentType | None = None,
+    q: Annotated[str | None, Query(max_length=200)] = None,
+    customer_id: Annotated[int | None, Query(gt=0)] = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    sort_by: InstrumentSortField = InstrumentSortField.ID,
+    sort_order: InstrumentSortOrder = InstrumentSortOrder.ASC,
 ) -> list[InstrumentRead]:
-    """Return all instruments, including records without a customer.
+    """Search identification numbers and combine filters before pagination.
 
-    An empty database returns an empty list. Results are not paginated and
-    have no explicitly defined sort order.
+    Search uses case-insensitive literal substrings; blank search lists all
+    matching instruments. Filters are combined with AND. Sorting puts nulls
+    last and uses ascending ID to resolve ties. Default order is ascending ID.
+    X-Total-Count includes matches beyond the page, even for empty pages.
+    Count and page queries may observe concurrent committed changes.
     """
     statement = select(Instrument)
     if ownership is not None:
         statement = statement.where(Instrument.ownership == ownership)
     if type is not None:
         statement = statement.where(Instrument.type == type)
-    instruments = session.exec(statement).all()
+    if customer_id is not None:
+        statement = statement.where(Instrument.customer_id == customer_id)
+    if q is not None and (term := q.strip()):
+        statement = statement.where(
+            col(Instrument.identification_number).icontains(term, autoescape=True)
+        )
+    total = session.exec(select(func.count()).select_from(statement.subquery())).one()
+    response.headers["X-Total-Count"] = str(total)
+    # Attribute names come exclusively from the validated enum, never raw SQL.
+    column = col(getattr(Instrument, sort_by.value))
+    ordering = column.desc() if sort_order == InstrumentSortOrder.DESC else column.asc()
+    statement = statement.order_by(ordering.nulls_last())
+    if sort_by != InstrumentSortField.ID:
+        statement = statement.order_by(col(Instrument.id).asc())
+    instruments = session.exec(statement.offset(offset).limit(limit)).all()
     return [InstrumentRead.model_validate(instrument) for instrument in instruments]
 
 

@@ -11,8 +11,8 @@
 `customer_id` bleibt der Eigentümerverweis für die vorhandene Kundenübersicht
 und Kundeninstrumentliste. Archivierung verändert diese Zuordnung nicht.
 Die Kategorie ist in allen Instrumentantworten enthalten. Werkstattbestand lässt
-sich mit `GET /api/v1/instruments?ownership=workshop` auswählen. Die Liste bleibt
-ansonsten unverändert. Unbekannte Kategorien und widersprüchliche Kombinationen
+sich mit `GET /api/v1/instruments?ownership=workshop` auswählen. Weitere
+Suchparameter, Pagination und Sortierung beschreibt die [Instrumentensuche](instrument-search.md). Unbekannte Kategorien und widersprüchliche Kombinationen
 liefern HTTP 422; nicht vorhandene Kunden oder Instrumente HTTP 404.
 
 Anlagebeispiele für `POST /api/v1/instruments`:

@@ -1,4 +1,4 @@
-.PHONY: dev test test-instruments lint lint-fix format format-check typecheck db-migrate db-migration db-downgrade db-check
+.PHONY: dev test test-instruments lint lint-fix format format-check typecheck db-migrate db-migration db-downgrade db-check default
 
 dev:
 	uv run fastapi dev
@@ -35,3 +35,7 @@ db-downgrade:
 
 db-check:
 	uv run alembic check
+
+default: 
+	git switch main
+	git pull 
