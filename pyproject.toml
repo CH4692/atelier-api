@@ -15,6 +15,7 @@ dependencies = [
     "pwdlib[argon2]>=0.3.1",
     "pydantic-settings>=2.16.0",
     "pytest>=9.1.1",
+    "qrcode>=8.2,<9",
     "sqlmodel>=0.0.48",
 ]
 
@@ -54,6 +55,7 @@ dev = [
     "pytest>=9.1.1",
     "python-semantic-release==10.7.0",
     "ruff>=0.17.1",
+    "types-qrcode>=8.2.0.20260518",
 ]
 
 [tool.mypy]

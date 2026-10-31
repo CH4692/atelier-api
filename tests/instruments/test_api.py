@@ -302,7 +302,7 @@ def test_update_instrument_changes_details(
 def test_update_instrument_preserves_omitted_fields(
     client, mock_session, update_instrument_target
 ):
-    before = update_instrument_target.model_dump(mode="json")
+    before = update_instrument_target.model_dump(mode="json", exclude={"public_id"})
     response = client.patch("/api/v1/instruments/42", json={"notes": "Changed notes."})
     assert response.status_code == 200
     assert response.json() == {**before, "notes": "Changed notes."}
@@ -354,7 +354,7 @@ def test_update_instrument_clears_optional_fields(
 def test_update_instrument_empty_body_is_noop(
     client, mock_session, update_instrument_target
 ):
-    before = update_instrument_target.model_dump(mode="json")
+    before = update_instrument_target.model_dump(mode="json", exclude={"public_id"})
     response = client.patch("/api/v1/instruments/42", json={})
     assert response.status_code == 200
     assert response.json() == before

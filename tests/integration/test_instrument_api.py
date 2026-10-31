@@ -48,7 +48,7 @@ def test_register_instrument_persists_details_and_customer(
         assert stored.customer is not None
         assert stored.customer.id == customer_id
         assert stored.type is InstrumentType.VIOLIN
-        assert stored.model_dump(mode="json") == created
+        assert stored.model_dump(mode="json", exclude={"public_id"}) == created
 
 
 def test_register_unassigned_instrument_persists_without_customer(
@@ -222,7 +222,7 @@ def test_update_instrument_persists_details_and_customer_changes(
     ) as session:
         stored = session.get(Instrument, created["id"])
         assert stored is not None
-        assert stored.model_dump(mode="json") == expected
+        assert stored.model_dump(mode="json", exclude={"public_id"}) == expected
         assert stored.customer is not None
         assert stored.customer.id == customer_ids[1]
     assert postgres_client.get(path).json() == expected

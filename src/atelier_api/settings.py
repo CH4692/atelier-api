@@ -28,6 +28,7 @@ class Settings(BaseSettings):
         "http://localhost:8000",
         "http://127.0.0.1:8000",
     ]
+    public_qr_base_url: str | None = None
     audit_retention_days: int = Field(default=180, ge=1)
     session_idle_seconds: int = Field(default=1800, gt=0)
     session_absolute_seconds: int = Field(default=28800, gt=0)
@@ -76,6 +77,28 @@ class Settings(BaseSettings):
                 )
         return values
 
+    @field_validator("public_qr_base_url")
+    @classmethod
+    def validate_qr_base_url(cls, value: str | None) -> str | None:
+        """Accept a bounded explicit origin, never a request-derived host."""
+        if value is None:
+            return None
+        cls.validate_origins([value])
+        parsed = urlsplit(value)
+        try:
+            _ = parsed.port
+        except ValueError:
+            raise ValueError("Invalid PUBLIC_QR_BASE_URL port") from None
+        if (
+            len(value) > 500
+            or not parsed.netloc.isascii()
+            or any(
+                ord(char) <= 32 or ord(char) == 127 or char in '\\<>"' for char in value
+            )
+        ):
+            raise ValueError("Invalid PUBLIC_QR_BASE_URL origin")
+        return value
+
     @field_validator("trusted_proxy_ips")
     @classmethod
     def validate_proxies(cls, values: list[str]) -> list[str]:
@@ -91,6 +114,12 @@ class Settings(BaseSettings):
             not origin.startswith("https://") for origin in self.frontend_origins
         ):
             raise ValueError("Production frontend origins must use HTTPS")
+        if (
+            self.environment == "production"
+            and self.public_qr_base_url is not None
+            and not self.public_qr_base_url.startswith("https://")
+        ):
+            raise ValueError("Production PUBLIC_QR_BASE_URL must use HTTPS")
         if self.session_absolute_seconds < self.session_idle_seconds:
             raise ValueError(
                 "Absolute session lifetime must not be shorter than inactivity timeout"
