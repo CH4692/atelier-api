@@ -102,6 +102,7 @@ def run(engine, storage, **changes):
     return purge_photos(engine, storage, configuration(), now=NOW, **changes)
 
 
+@pytest.mark.e2e
 def test_only_reviewed_expired_unprotected_photos_are_purged(committed_photos):
     engine, storage, create = committed_photos
     eligible = create()

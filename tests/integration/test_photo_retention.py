@@ -27,6 +27,7 @@ def retention_photo(auth_factory):
     return client, storage, path, photo
 
 
+@pytest.mark.e2e
 def test_restore_makes_deleted_photo_visible_and_audits(
     retention_photo, db_connection, accounts
 ):
@@ -141,6 +142,7 @@ def test_expired_and_purging_photos_cannot_restore(retention_photo, db_connectio
     assert client.get(path + "/content").status_code == 404
 
 
+@pytest.mark.e2e
 def test_holds_require_explicit_release_and_approval(
     retention_photo, db_connection, accounts
 ):

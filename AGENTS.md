@@ -80,7 +80,7 @@ Run from the repository root:
 uv run ruff check .
 uv run ruff format --check .
 uv run mypy .
-uv run pytest
+uv run pytest --require-postgres -m "not external"
 ```
 
 `make lint`, `make format-check`, `make typecheck` and `make test` are equivalent.
@@ -91,7 +91,8 @@ Local application and integration connections use Neon when configured there.
 Set TEST_DATABASE_URL in .env to a direct connection to a dedicated database ending
 in \_test; the integration fixtures create and migrate a disposable schema. Only
 when DATABASE_URL is absent from both sources is an import-only SQLite URL used.
-Missing TEST_DATABASE_URL skips integration tests; an unreachable configured
+Complete Make/CI commands require TEST_DATABASE_URL and fail if it is absent. A
+direct interactive pytest invocation can still skip missing integration prerequisites; an unreachable configured
 database fails rather than falling back to local PostgreSQL or SQLite.
 Also verify application imports and OpenAPI generation after API documentation edits.
 
@@ -132,3 +133,8 @@ pre-existing issues from regressions.
 
 - Keep the final response concise: summarize changes, tests and any remaining
   risks or limitations.
+
+Testing commands, optional per-worker databases and required CI checks are documented
+in `docs/testing.md`. Preserve the distinction between fast feedback and complete
+PostgreSQL verification. Parallel tests require CREATEDB on the dedicated test server;
+serial mode remains supported without that permission.

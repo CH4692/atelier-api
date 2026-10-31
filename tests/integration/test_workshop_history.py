@@ -70,6 +70,7 @@ def upload(client, order, content=b"Original repair document"):
     return metadata
 
 
+@pytest.mark.e2e
 def test_history_is_chronological_and_preserves_documents_after_archiving(
     history_data, db_connection, accounts
 ):

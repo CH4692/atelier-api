@@ -146,7 +146,11 @@ def test_every_business_route_and_method_rejects_unauthenticated_access(
     assert response.json() == {"detail": "Authentication required"}
 
 
-@pytest.mark.parametrize("cookie", [None, "invalid", token_urlsafe(32)])
+@pytest.mark.parametrize(
+    "cookie",
+    [None, "invalid", token_urlsafe(32)],
+    ids=["missing", "malformed", "unknown-valid-token"],
+)
 def test_missing_and_invalid_sessions(auth_factory, cookie):
     client = auth_factory()
     if cookie:
@@ -187,6 +191,7 @@ def test_activity_updates_idle_but_not_absolute_expiration(auth_factory, db_conn
     assert current.expires_at == old.expires_at
 
 
+@pytest.mark.e2e
 def test_rotation_and_logout_prevent_replay(auth_factory, db_connection):
     client = auth_factory()
     sign_in(client)
