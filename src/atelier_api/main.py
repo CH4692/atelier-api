@@ -18,6 +18,8 @@ from atelier_api.customers.router import customers_router
 from atelier_api.docs import swagger_ui
 from atelier_api.health.router import health_router
 from atelier_api.instruments.customer_router import customer_instruments_router
+from atelier_api.instruments.qr import router as qr_router
+from atelier_api.instruments.qr import scan_router
 from atelier_api.instruments.router import instruments_router
 from atelier_api.repair_orders.router import router as repairs_router
 from atelier_api.settings import Settings, settings
@@ -132,9 +134,11 @@ def create_app(config: Settings | None = None) -> FastAPI:
         instruments_router,
         customer_instruments_router,
         repairs_router,
+        qr_router,
     ):
         api_v1_router.include_router(router, dependencies=protected)
     application.include_router(api_v1_router)
+    application.include_router(scan_router, dependencies=protected)
 
     @application.exception_handler(RequestValidationError)
     async def validation_error(

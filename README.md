@@ -1098,3 +1098,13 @@ Die Produktideen aus anderen Lösungen dienen als **Orientierung**. Fremde Texte
 **Stand dieser README:** 29. Oktober 2026.
 
 **Hinweis:** Fachliche Anforderungen sind ein Arbeitsstand und müssen im Pilot mit Herrn Lampe validiert werden.
+
+### QR-Codes für Instrumente
+
+Mitarbeiter und Administratoren können unter
+`GET /api/v1/instruments/{id}/qr-code.svg` einen druckbaren SVG-QR-Code laden.
+`PUBLIC_QR_BASE_URL` legt die dauerhafte Basis-URL fest (in Produktion HTTPS).
+Ohne Konfiguration werden keine Codes erzeugt. Die Links verwenden zufällige,
+unveränderliche Kennungen und bleiben durch Anmeldung und Rollenprüfung geschützt.
+Migration, Druck und die aktuelle Weiterleitung zur Datensatz-API sind in
+[Instrument QR codes](docs/instrument-qr-codes.md) beschrieben.

@@ -56,7 +56,7 @@ def test_instrument_management_lifecycle(postgres_client, db_connection):
     ) as session:
         stored = session.get(Instrument, created["id"])
         assert stored is not None
-        assert stored.model_dump(mode="json") == updated
+        assert stored.model_dump(mode="json", exclude={"public_id"}) == updated
         assert stored.customer is not None
         assert stored.customer.id == next_customer["id"]
     assert postgres_client.get(first_list).json() == []

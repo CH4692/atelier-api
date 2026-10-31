@@ -57,6 +57,7 @@ def test_migration_creates_instrument_constraints_and_customer_reference(
     inspector = inspect(postgres_engine)
     assert {column["name"] for column in inspector.get_columns("instrument")} == {
         "id",
+        "public_id",
         "type",
         "maker",
         "year_of_manufacture",

@@ -2,8 +2,9 @@
 
 from datetime import UTC, datetime
 from typing import ClassVar
+from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, DateTime, Index, func
+from sqlalchemy import CheckConstraint, DateTime, Index, func, text
 from sqlmodel import Field, Relationship, SQLModel
 
 from atelier_api.customers.models import Customer
@@ -43,6 +44,11 @@ class Instrument(InstrumentBase, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
+    public_id: UUID = Field(
+        default_factory=uuid4,
+        unique=True,
+        sa_column_kwargs={"server_default": text("gen_random_uuid()")},
+    )
     customer: Customer | None = Relationship()
 
     def __init__(self, **data: object) -> None:
