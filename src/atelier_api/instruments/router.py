@@ -17,7 +17,9 @@ from .schemas import (
     InstrumentOwnership,
     InstrumentOwnershipRead,
     InstrumentRead,
+    InstrumentType,
     InstrumentUpdate,
+    validate_category_attributes,
 )
 
 instruments_router = APIRouter(prefix="/instruments", tags=["instruments"])
@@ -30,7 +32,9 @@ instruments_router = APIRouter(prefix="/instruments", tags=["instruments"])
     responses={503: {"description": "Database unavailable"}},
 )
 def get_instruments(
-    session: SessionDep, ownership: InstrumentOwnership | None = None
+    session: SessionDep,
+    ownership: InstrumentOwnership | None = None,
+    type: InstrumentType | None = None,
 ) -> list[InstrumentRead]:
     """Return all instruments, including records without a customer.
 
@@ -40,6 +44,8 @@ def get_instruments(
     statement = select(Instrument)
     if ownership is not None:
         statement = statement.where(Instrument.ownership == ownership)
+    if type is not None:
+        statement = statement.where(Instrument.type == type)
     instruments = session.exec(statement).all()
     return [InstrumentRead.model_validate(instrument) for instrument in instruments]
 
@@ -237,6 +243,11 @@ def update_instrument(
     session.refresh(instrument, with_for_update=True)
     try:
         changes = ownership_changes(instrument, instrument_update)
+        validate_category_attributes(
+            changes.get("type", instrument.type),
+            changes.get("body_length_mm", instrument.body_length_mm),
+            changes.get("bow_weight_g", instrument.bow_weight_g),
+        )
     except ValueError as error:
         raise HTTPException(422, str(error)) from None
     if "customer_id" in changes and instrument_update.customer_id is not None:

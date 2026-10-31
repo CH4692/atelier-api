@@ -2,19 +2,42 @@
 
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import Annotated
 
-from pydantic import AwareDatetime, field_validator, model_validator
+from pydantic import (
+    AwareDatetime,
+    FiniteFloat,
+    Strict,
+    field_validator,
+    model_validator,
+)
 from sqlalchemy import Enum, Text
 from sqlmodel import Field, SQLModel
 
+Measurement = Annotated[FiniteFloat, Strict()]
+
 
 class InstrumentType(StrEnum):
-    """List the instrument types supported by the initial data model."""
+    """Classify string instruments and bows using one canonical category field."""
 
     VIOLIN = "violin"
     VIOLA = "viola"
     CELLO = "cello"
     DOUBLE_BASS = "double_bass"
+    BOW = "bow"
+
+
+def validate_category_attributes(
+    instrument_type: InstrumentType,
+    body_length_mm: float | None,
+    bow_weight_g: float | None,
+) -> None:
+    """Reject irrelevant attributes without silently discarding stored values."""
+    if instrument_type == InstrumentType.BOW:
+        if body_length_mm is not None:
+            raise ValueError("Bows cannot have body_length_mm; clear it explicitly")
+    elif bow_weight_g is not None:
+        raise ValueError("Only bows can have bow_weight_g; clear it explicitly")
 
 
 class InstrumentOwnership(StrEnum):
@@ -43,8 +66,11 @@ class InstrumentBase(SQLModel):
             create_constraint=True,
             name="ck_instrument_type",
             length=32,
-        )
+        ),
+        index=True,
     )
+    body_length_mm: Measurement | None = Field(default=None, gt=0)
+    bow_weight_g: Measurement | None = Field(default=None, gt=0)
     maker: str | None = None
     year_of_manufacture: int | None = Field(default=None, ge=1, le=9999)
     identification_number: str | None = None
@@ -89,6 +115,7 @@ class InstrumentBase(SQLModel):
             and self.ownership != InstrumentOwnership.CUSTOMER
         ):
             raise ValueError("Only customer-owned instruments can reference a customer")
+        validate_category_attributes(self.type, self.body_length_mm, self.bow_weight_g)
         return self
 
 
@@ -113,6 +140,8 @@ class InstrumentUpdate(SQLModel):
     model_config = {"extra": "forbid"}
 
     type: InstrumentType | None = None
+    body_length_mm: Measurement | None = Field(default=None, gt=0)
+    bow_weight_g: Measurement | None = Field(default=None, gt=0)
     maker: str | None = None
     year_of_manufacture: int | None = Field(default=None, ge=1, le=9999)
     identification_number: str | None = None

@@ -35,6 +35,8 @@ def test_accepts_complete_instrument():
         "notes": "Repaired top; handwritten label.",
         "customer_id": 2,
         "ownership": "customer",
+        "body_length_mm": None,
+        "bow_weight_g": None,
     }
 
 
