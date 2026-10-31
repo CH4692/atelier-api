@@ -48,6 +48,25 @@ class InstrumentOwnership(StrEnum):
     UNASSIGNED = "unassigned"
 
 
+class InstrumentSortField(StrEnum):
+    """Allow only explicit public fields as SQL sorting targets."""
+
+    ID = "id"
+    IDENTIFICATION_NUMBER = "identification_number"
+    TYPE = "type"
+    MAKER = "maker"
+    YEAR_OF_MANUFACTURE = "year_of_manufacture"
+    CUSTOMER_ID = "customer_id"
+    OWNERSHIP = "ownership"
+
+
+class InstrumentSortOrder(StrEnum):
+    """Define the supported sort directions."""
+
+    ASC = "asc"
+    DESC = "desc"
+
+
 class InstrumentBase(SQLModel):
     """Share instrument fields across the table and input/output schemas.
 

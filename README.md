@@ -229,7 +229,7 @@ Details, optionale Messwerte, Typwechsel und Migration sind in
 
 ### Instrumente auflisten
 
-`GET /api/v1/instruments` unterstützt die optionalen UND-verknüpften Filter `type` (z. B. `bow`) und `ownership` (z. B. `workshop`) und liefert HTTP 200 und eine JSON-Liste mit dem Antwortschema `list[InstrumentRead]`. Jeder Eintrag enthält ID, Typ, Hersteller, Baujahr, Identifikationsnummer, Notizen und die optionale Kunden-ID. Unzugeordnete Instrumente werden ebenfalls angezeigt. Sind keine Instrumente vorhanden, ist die Antwort `[]`. Eine Sortierreihenfolge oder Pagination ist noch nicht festgelegt. Der Endpunkt erscheint unter `/docs`.
+`GET /api/v1/instruments` unterstützt die optionalen UND-verknüpften Filter `type` (z. B. `bow`) und `ownership` (z. B. `workshop`) und liefert HTTP 200 und eine JSON-Liste mit dem Antwortschema `list[InstrumentRead]`. Jeder Eintrag enthält ID, Typ, Hersteller, Baujahr, Identifikationsnummer, Notizen und die optionale Kunden-ID. Unzugeordnete Instrumente werden ebenfalls angezeigt. Sind keine Instrumente vorhanden, ist die Antwort `[]`. Die Liste unterstützt `q` für Identifikationsnummern, `customer_id` für aktuelle Eigentümer, `offset`/`limit` für Pagination und `sort_by`/`sort_order` für Sortierung. Standard sind 100 Einträge nach ID aufsteigend, maximal 200; `X-Total-Count` enthält alle Treffer vor Pagination. Details stehen in [Instrumentensuche](docs/instrument-search.md). Der Endpunkt erscheint unter `/docs`.
 
 ```bash
 curl --fail -b /private/tmp/atelier-cookies.txt -H 'Origin: http://127.0.0.1:8000' -H 'X-CSRF-Protection: 1' http://127.0.0.1:8000/api/v1/instruments

@@ -58,8 +58,9 @@ nur, wenn sich auch Eigentum oder Kundenreferenz tatsächlich ändern.
 
 `GET /api/v1/instruments?type=bow` liefert nur Bögen.
 `GET /api/v1/instruments?type=bow&ownership=workshop` kombiniert beide Filter mit
-UND. Ohne Typfilter bleibt die bisherige Gesamtliste erhalten, ohne Treffer
-folgt `[]`. Unbekannte Filterwerte ergeben HTTP 422. Zugriffsschutz und bestehende
+UND. Ohne Typfilter werden alle Kategorien innerhalb der gewählten Seite
+berücksichtigt; ohne Treffer folgt `[]`. Suche, Pagination und Sortierung sind
+in [Instrumentensuche](instrument-search.md) beschrieben. Unbekannte Filterwerte ergeben HTTP 422. Zugriffsschutz und bestehende
 Routen bleiben erhalten; der neue Typfilter nutzt einen Datenbankindex.
 
 ## Migration

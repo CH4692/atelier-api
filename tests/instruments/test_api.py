@@ -177,7 +177,7 @@ def test_list_instruments_returns_schema_fields(client, mock_session):
             "bow_weight_g": None,
         },
     ]
-    mock_session.exec.assert_called_once()
+    assert mock_session.exec.call_count == 2
     mock_session.commit.assert_not_called()
 
 
