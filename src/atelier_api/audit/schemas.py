@@ -15,6 +15,8 @@ class AuditDetails(BaseModel):
     new_role: UserRole | None = None
     previous_customer_id: int | None = Field(default=None, gt=0)
     new_customer_id: int | None = Field(default=None, gt=0)
+    execution_id: str | None = Field(default=None, pattern=r"^[0-9a-f-]{36}$")
+    instrument_id: int | None = Field(default=None, gt=0)
     removed_count: int | None = Field(default=None, ge=0)
 
 

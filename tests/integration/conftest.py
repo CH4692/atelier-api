@@ -86,6 +86,7 @@ def db_connection(postgres_engine):
         assert connection.scalar(text("SELECT count(*) FROM instrument")) == 0
         assert connection.scalar(text("SELECT count(*) FROM repair_order")) == 0
         assert connection.scalar(text("SELECT count(*) FROM repair_document")) == 0
+        assert connection.scalar(text("SELECT count(*) FROM instrument_photo")) == 0
         assert (
             connection.scalar(text("SELECT count(*) FROM instrument_ownership_event"))
             == 0

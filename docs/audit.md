@@ -106,3 +106,14 @@ voraus. Produktionsbetrieb sollte Laufzeit-, Migrations- und Bereinigungsrollen
 trennen, SQL-Zugriff beschränken und insbesondere UPDATE/DELETE nur berechtigten
 Betreiberrollen ermöglichen. Solche datenbankseitigen Berechtigungen müssen vom
 Deployment passend zu den verwendeten Rollen eingerichtet werden.
+
+Instrument photographs record `instrument_photo.uploaded` and
+`instrument_photo.deletion_requested`, with the acting user and photo ID plus
+`instrument_id` in allowed details. Success events share the transaction with
+ready metadata or soft deletion. Filenames, object keys, binaries, R2 credentials
+and URLs are excluded. The retention feature also records restoration, hold creation/release, explicit
+purge approval, purge start, failure and completion. Scheduled events have a UUID
+`execution_id` and no acting user. Purge completion is atomic with photo-row
+removal; its audit reference remains. Hold reasons and filenames are not included.
+Purge start occurs once, while failed retry attempts have their own job IDs. See
+[instrument photo management](instrument-photos.md) for upload reconciliation.

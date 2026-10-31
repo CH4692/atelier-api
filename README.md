@@ -1108,3 +1108,19 @@ Ohne Konfiguration werden keine Codes erzeugt. Die Links verwenden zufällige,
 unveränderliche Kennungen und bleiben durch Anmeldung und Rollenprüfung geschützt.
 Migration, Druck und die aktuelle Weiterleitung zur Datensatz-API sind in
 [Instrument QR codes](docs/instrument-qr-codes.md) beschrieben.
+
+### Instrumentenfotos
+
+Private Instrumentenfotos werden in Cloudflare R2 gespeichert; PostgreSQL enthält
+nur Metadaten. Mitarbeiter und Administratoren können JPEG-, PNG- und WebP-Fotos
+hochladen, anzeigen und herunterladen. Löschanfragen sind Administratoren
+vorbehalten und bewahren die Dateien bis zur Klärung der Aufbewahrungsregeln.
+Einrichtung, Upload-Limits, API, Bereinigung und Betrieb sind in
+[Instrument photo management](docs/instrument-photos.md) beschrieben.
+
+Fotos können innerhalb der konfigurierten Wiederherstellungsfrist durch
+Administratoren wiederhergestellt und durch Aufbewahrungssperren geschützt werden.
+Der separate Befehl `atelier-photos-purge --dry-run` zeigt Löschkandidaten an.
+Dauerhafte Löschung ist standardmäßig deaktiviert und erfordert zusätzlich eine
+explizite Freigabe je Foto. Betrieb und Render-Cron-Konfiguration:
+[Photo retention](docs/photo-retention.md).

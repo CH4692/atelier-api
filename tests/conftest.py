@@ -8,6 +8,18 @@ import pytest
 from dotenv import load_dotenv
 from fastapi.testclient import TestClient
 
+# Tests must never inherit object-storage credentials from a developer .env.
+# Empty overrides disable storage; photo tests inject an in-memory service.
+for name in (
+    "R2_ENDPOINT_URL",
+    "R2_ACCESS_KEY_ID",
+    "R2_SECRET_ACCESS_KEY",
+    "R2_BUCKET_NAME",
+):
+    os.environ[name] = ""
+os.environ["PHOTO_AUTO_PURGE_ENABLED"] = "false"
+os.environ["PHOTO_SOFT_DELETE_RETENTION_DAYS"] = "30"
+
 
 def pytest_configure(config: pytest.Config) -> None:
     """Load local database settings before test modules import the application.
@@ -18,6 +30,8 @@ def pytest_configure(config: pytest.Config) -> None:
     """
     load_dotenv(dotenv_path=config.rootpath / ".env", override=False)
     os.environ.setdefault("DATABASE_URL", "sqlite://")
+    # Production-config fixtures must not inherit a local HTTP QR origin.
+    os.environ.pop("PUBLIC_QR_BASE_URL", None)
 
 
 @pytest.fixture
