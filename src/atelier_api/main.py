@@ -19,6 +19,7 @@ from atelier_api.docs import swagger_ui
 from atelier_api.health.router import health_router
 from atelier_api.instruments.customer_router import customer_instruments_router
 from atelier_api.instruments.router import instruments_router
+from atelier_api.repair_orders.router import router as repairs_router
 from atelier_api.settings import Settings, settings
 from atelier_api.version import software_version
 
@@ -126,7 +127,12 @@ def create_app(config: Settings | None = None) -> FastAPI:
     api_v1_router.include_router(auth_router)
     api_v1_router.include_router(audit_router)
     protected = [Depends(require_internal_user)]
-    for router in (customers_router, instruments_router, customer_instruments_router):
+    for router in (
+        customers_router,
+        instruments_router,
+        customer_instruments_router,
+        repairs_router,
+    ):
         api_v1_router.include_router(router, dependencies=protected)
     application.include_router(api_v1_router)
 

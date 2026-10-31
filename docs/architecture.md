@@ -68,7 +68,7 @@ Weitere fachübergreifende Request-Dependencies, etwa eine spätere Benutzeranme
 
 ## Namen und Imports
 
-- Feature-Pakete verwenden englische fachliche Namen im Plural und `snake_case`, beispielsweise `customers` oder später `repair_orders`.
+- Feature-Pakete verwenden englische fachliche Namen im Plural und `snake_case`, beispielsweise `customers` oder `repair_orders`.
 - Dateien und Funktionen verwenden `snake_case`, Klassen `PascalCase`. API-Schemas heißen beispielsweise `CustomerCreate` und `CustomerRead`.
 - Router heißen `<feature>_router`, beispielsweise `customers_router`, mit dem passenden URL-Präfix `/customers` und Tag `customers`.
 - Zwischen Paketen werden absolute Imports ab `atelier_api` verwendet. Innerhalb eines Features sind relative Imports vorgesehen.

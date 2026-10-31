@@ -4,6 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import col, select
 
 from atelier_api.audit.models import AuditAction, AuditResource
@@ -153,6 +154,7 @@ def get_instrument_by_id(instrument_id: int, session: SessionDep) -> InstrumentR
     summary="Delete an instrument",
     responses={
         404: {"description": "Instrument not found"},
+        409: {"description": "Instrument has associated historical records"},
         503: {"description": "Database unavailable"},
     },
 )
@@ -161,6 +163,7 @@ def delete_instrument(instrument_id: int, session: SessionDep) -> Response:
 
     Deletion is committed before returning an empty response. Repeating the
     request for the deleted identifier returns 404.
+    Instruments referenced by repair history are retained and return 409.
 
     Args:
         instrument_id: The identifier of the instrument to delete.
@@ -178,15 +181,26 @@ def delete_instrument(instrument_id: int, session: SessionDep) -> Response:
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Instrument not found",
         )
-    session.delete(instrument)
-    record_event(
-        session,
-        AuditAction.INSTRUMENT_DELETED,
-        AuditResource.INSTRUMENT,
-        instrument.id,
-        actor_id=session.info.get("audit_actor_id"),
-    )
-    session.commit()
+    try:
+        session.delete(instrument)
+        record_event(
+            session,
+            AuditAction.INSTRUMENT_DELETED,
+            AuditResource.INSTRUMENT,
+            instrument.id,
+            actor_id=session.info.get("audit_actor_id"),
+        )
+        session.commit()
+    except IntegrityError as error:
+        session.rollback()
+        if (
+            getattr(error.orig, "sqlstate", getattr(error.orig, "pgcode", None))
+            != "23503"
+        ):
+            raise
+        raise HTTPException(
+            409, "Instrument has associated historical records"
+        ) from None
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
