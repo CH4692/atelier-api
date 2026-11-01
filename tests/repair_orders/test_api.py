@@ -175,3 +175,38 @@ def test_history_and_document_upload_are_documented():
     upload = schema["paths"]["/api/v1/repair-orders/{order_id}/documents"]["post"]
     assert upload["requestBody"]["required"] is True
     assert "application/octet-stream" in upload["requestBody"]["content"]
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"status": "invalid"},
+        {"customer_id": 0},
+        {"customer_id": -1},
+        {"customer_id": "abc"},
+        {"limit": 0},
+        {"limit": 201},
+        {"offset": -1},
+        {"offset": "1.5"},
+        {"include_archived": "invalid"},
+    ],
+)
+def test_repair_listing_rejects_invalid_filters_before_database_access(
+    client, mock_session, params
+):
+    assert client.get("/api/v1/repairs", params=params).status_code == 422
+    mock_session.exec.assert_not_called()
+
+
+def test_repair_read_endpoints_are_documented():
+    paths = app.openapi()["paths"]
+    listing = paths["/api/v1/repairs"]["get"]
+    assert {parameter["name"] for parameter in listing["parameters"]} == {
+        "status",
+        "customer_id",
+        "offset",
+        "limit",
+        "include_archived",
+    }
+    assert "X-Total-Count" in listing["responses"]["200"]["headers"]
+    assert "404" in paths["/api/v1/repairs/{repair_id}"]["get"]["responses"]

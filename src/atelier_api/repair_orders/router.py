@@ -25,6 +25,7 @@ from .schemas import (
     RepairOrderRegister,
 )
 from .service import persist_order, register_order, repair_details
+from .statuses import RepairStatus
 
 router = APIRouter(
     tags=["repairs"],
@@ -104,6 +105,65 @@ def get_instrument_history(
         instrument=InstrumentRead.model_validate(instrument),
         repair_orders=repair_details(session, list(orders)),
     )
+
+
+@router.get(
+    "/repairs",
+    response_model=list[RepairOrderRead],
+    summary="List repair orders with status and customer filters",
+    responses={
+        200: {
+            "headers": {
+                "X-Total-Count": {
+                    "description": "Matching repair count before pagination",
+                    "schema": {"type": "integer", "minimum": 0},
+                }
+            }
+        }
+    },
+)
+def list_repairs(
+    session: SessionDep,
+    response: Response,
+    status: RepairStatus | None = None,
+    customer_id: Annotated[int | None, Query(gt=0)] = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    include_archived: bool = False,
+) -> list[RepairOrderRead]:
+    """Combine filters and order by ID for deterministic offset pagination.
+
+    Archived orders remain accessible by ID and may be included explicitly.
+    Count and page queries can observe different concurrent commits.
+    """
+    statement = select(RepairOrder)
+    if not include_archived:
+        statement = statement.where(col(RepairOrder.is_archived).is_(False))
+    if status is not None:
+        statement = statement.where(RepairOrder.status == status)
+    if customer_id is not None:
+        statement = statement.where(RepairOrder.customer_id == customer_id)
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["X-Total-Count"] = str(
+        session.exec(select(func.count()).select_from(statement.subquery())).one()
+    )
+    orders = session.exec(
+        statement.order_by(col(RepairOrder.id)).offset(offset).limit(limit)
+    ).all()
+    return [RepairOrderRead.model_validate(order) for order in orders]
+
+
+@router.get(
+    "/repairs/{repair_id}",
+    response_model=RepairOrderDetail,
+    summary="Read a repair order and its document metadata",
+    responses={404: {"description": "Repair order not found"}},
+)
+def get_repair(
+    repair_id: int, session: SessionDep, response: Response
+) -> RepairOrderDetail:
+    """Read current or archived orders using the existing detail projection."""
+    return get_repair_order(repair_id, session, response)
 
 
 @router.get(

@@ -157,3 +157,23 @@ reference. Customer or instrument deletion with linked orders returns HTTP 409;
 archiving and ownership changes preserve the original contracting customer.
 There is no cascading deletion. The migration refuses a downgrade if managed
 intake data would be lost; review and export that data before any rollback.
+
+## List and retrieve repair orders
+
+`GET /api/v1/repairs` returns an array of repair orders sorted by ascending ID.
+Optional `status` and positive `customer_id` query parameters are combined with
+AND. Customer filtering uses the recorded contracting customer, not today's
+instrument owner; unattributed historical entries do not match a customer filter.
+An unknown customer filter or a filter without matches returns an empty array.
+
+Use `offset` (default 0, minimum 0) and `limit` (default 100, range 1–200).
+`X-Total-Count` reports the matching count before pagination, including on empty
+pages. Invalid status, customer ID or pagination values return HTTP 422. Count
+and page queries may observe different concurrent commits. Archived repairs are
+excluded by default; `include_archived=true` includes them.
+
+`GET /api/v1/repairs/{repair_id}` returns the order with document metadata,
+including archived orders, or HTTP 404 if unknown. The existing
+`GET /api/v1/repair-orders/{order_id}` remains available. Both new GET endpoints
+require staff authorization and return `Cache-Control: private, no-store`. List
+responses exclude document contents and metadata; details include metadata only.

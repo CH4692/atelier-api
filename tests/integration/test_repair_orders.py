@@ -400,3 +400,125 @@ def test_migration_preserves_unattributed_history_and_guards_downgrade(db_connec
     assert (
         db_connection.scalar(text("SELECT repair_order_id FROM repair_document")) == 10
     )
+
+
+@pytest.fixture
+def repair_listing(intake):
+    client, customer, instrument, payload = intake
+    other = client.post(
+        "/api/v1/customers", json={"first_name": "Other", "last_name": "Customer"}
+    ).json()
+    orders = []
+    for customer_id, status in [
+        (customer["id"], "accepted"),
+        (customer["id"], "in_progress"),
+        (other["id"], "accepted"),
+        (customer["id"], "accepted"),
+    ]:
+        response = client.post(
+            "/api/v1/repairs",
+            json={**payload, "customer_id": customer_id, "status": status},
+        )
+        assert response.status_code == 201
+        orders.append(response.json())
+    assert (
+        client.patch(
+            f"/api/v1/repair-orders/{orders[-1]['id']}/archive",
+            json={"is_archived": True},
+        ).status_code
+        == 200
+    )
+    legacy = client.post(
+        f"/api/v1/instruments/{instrument['id']}/repair-orders",
+        json={
+            "work_description": "Historical work",
+            "performed_at": "2025-01-01T00:00:00Z",
+        },
+    )
+    assert legacy.status_code == 201
+    orders.append(legacy.json())
+    return client, customer, other, orders
+
+
+@pytest.mark.parametrize(
+    "params,expected",
+    [
+        ({}, [0, 1, 2, 4]),
+        ({"status": "accepted"}, [0, 2]),
+        ({"status": "in_progress"}, [1]),
+        ({"status": "cancelled"}, []),
+        ({"customer": "first"}, [0, 1]),
+        ({"customer": "other"}, [2]),
+        ({"customer": "first", "status": "accepted"}, [0]),
+        ({"customer_id": 999999}, []),
+        ({"include_archived": True}, [0, 1, 2, 3, 4]),
+        ({"include_archived": True, "customer": "first", "status": "accepted"}, [0, 3]),
+        ({"offset": 1, "limit": 2}, [1, 2]),
+        ({"offset": 3, "limit": 2}, [4]),
+        ({"offset": 4, "limit": 2}, []),
+        ({"offset": 999999}, []),
+        ({"limit": 1}, [0]),
+        ({"limit": 200}, [0, 1, 2, 4]),
+    ],
+)
+def test_repair_listing_filters_and_pagination(repair_listing, params, expected):
+    client, customer, other, orders = repair_listing
+    query = dict(params)
+    if "customer" in query:
+        query["customer_id"] = {"first": customer["id"], "other": other["id"]}[
+            query.pop("customer")
+        ]
+    response = client.get("/api/v1/repairs", params=query)
+    assert response.status_code == 200
+    assert [row["id"] for row in response.json()] == [orders[i]["id"] for i in expected]
+    assert response.headers["Cache-Control"] == "private, no-store"
+    assert all("documents" not in row for row in response.json())
+    unpaged = client.get(
+        "/api/v1/repairs",
+        params={k: v for k, v in query.items() if k not in {"offset", "limit"}},
+    )
+    assert response.headers["X-Total-Count"] == str(len(unpaged.json()))
+    assert unpaged.headers["X-Total-Count"] == response.headers["X-Total-Count"]
+
+
+@pytest.mark.parametrize("archived", [False, True])
+def test_repair_detail_matches_existing_route_with_document_metadata(intake, archived):
+    client, _, _, payload = intake
+    order = client.post("/api/v1/repairs", json=payload).json()
+    document = client.post(
+        f"/api/v1/repair-orders/{order['id']}/documents?filename=estimate.pdf",
+        content=b"Private estimate",
+    )
+    assert document.status_code == 201
+    if archived:
+        assert (
+            client.patch(
+                f"/api/v1/repair-orders/{order['id']}/archive",
+                json={"is_archived": True},
+            ).status_code
+            == 200
+        )
+    detail = client.get(f"/api/v1/repairs/{order['id']}")
+    assert detail.status_code == 200
+    assert detail.json() == client.get(f"/api/v1/repair-orders/{order['id']}").json()
+    assert detail.json()["documents"] == [document.json()]
+    assert "content" not in detail.json()["documents"][0]
+    assert detail.headers["Cache-Control"] == "private, no-store"
+
+
+def test_empty_repair_list_and_unknown_detail(intake):
+    client, _, _, _ = intake
+    response = client.get("/api/v1/repairs")
+    assert response.status_code == 200
+    assert response.json() == []
+    assert response.headers["X-Total-Count"] == "0"
+    assert client.get("/api/v1/repairs/999999").status_code == 404
+
+
+@pytest.mark.parametrize("path", ["/api/v1/repairs", "/api/v1/repairs/999999"])
+@pytest.mark.parametrize("role,expected", [(None, 401), ("customer", 403)])
+def test_repair_reads_require_workshop_access(auth_factory, path, role, expected):
+    client = auth_factory(customer_portal_auth_enabled=True)
+    if role:
+        assert sign_in(client, role).status_code == 200
+    assert client.get(path).status_code == expected
