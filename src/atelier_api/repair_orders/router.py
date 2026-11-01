@@ -22,8 +22,9 @@ from .schemas import (
     RepairOrderCreate,
     RepairOrderDetail,
     RepairOrderRead,
+    RepairOrderRegister,
 )
-from .service import repair_details
+from .service import persist_order, register_order, repair_details
 
 router = APIRouter(
     tags=["repairs"],
@@ -55,18 +56,7 @@ def create_repair_order(
         work_description=data.work_description,
         performed_at=data.performed_at,
     )
-    session.add(order)
-    session.flush()
-    record_event(
-        session,
-        AuditAction.REPAIR_ORDER_CREATED,
-        AuditResource.REPAIR_ORDER,
-        order.id,
-        actor_id=session.info.get("audit_actor_id"),
-    )
-    session.commit()
-    session.refresh(order)
-    return RepairOrderRead.model_validate(order)
+    return persist_order(session, order)
 
 
 @router.get(
@@ -259,3 +249,22 @@ def download_document(document_id: int, session: SessionDep) -> Response:
             "Cache-Control": "private, no-store",
         },
     )
+
+
+@router.post(
+    "/repair-orders",
+    response_model=RepairOrderRead,
+    status_code=201,
+    summary="Accept a repair order for a customer and instrument",
+    responses={404: {"description": "Customer or instrument not found"}},
+)
+def register_repair_order(
+    data: RepairOrderRegister, session: SessionDep
+) -> RepairOrderRead:
+    """Record a new order; the customer need not be the instrument's current owner.
+
+    Acceptance defaults to the current UTC timestamp. Planned work has no
+    performed_at timestamp unless one is explicitly supplied. Customer and
+    instrument remain referenced independently of later ownership changes.
+    """
+    return register_order(session, data)

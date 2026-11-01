@@ -15,6 +15,7 @@ from sqlmodel import Session, select
 
 from atelier_api.audit.models import AuditEvent
 from atelier_api.repair_orders import router as repair_routes
+from atelier_api.repair_orders import service as repair_service
 from atelier_api.repair_orders.models import MAX_DOCUMENT_BYTES
 from tests.integration.auth_helpers import sign_in
 
@@ -191,13 +192,14 @@ def test_audit_failure_rolls_back_repair_and_document(
         db_connection.scalar(text(f"SELECT count(*) FROM {table}"))
         for table in ("repair_order", "repair_document", "audit_event")
     ]
-    original = repair_routes.record_event
+    target = repair_service if operation == "repair" else repair_routes
+    original = target.record_event
 
     def append_then_fail(*args, **kwargs):
         original(*args, **kwargs)
         raise RuntimeError("Simulated audit failure")
 
-    monkeypatch.setattr(repair_routes, "record_event", append_then_fail)
+    monkeypatch.setattr(target, "record_event", append_then_fail)
     with pytest.raises(RuntimeError, match="Simulated audit failure"):
         if operation == "repair":
             client.post(
