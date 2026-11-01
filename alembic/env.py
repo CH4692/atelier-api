@@ -18,6 +18,7 @@ from atelier_api.instruments.models import (
     InstrumentOwnershipEvent,  # noqa: F401
 )
 from atelier_api.photos.models import InstrumentPhoto  # noqa: F401
+from atelier_api.repair_orders.item_models import RepairItem  # noqa: F401
 from atelier_api.repair_orders.models import RepairDocument, RepairOrder  # noqa: F401
 from atelier_api.settings import settings
 from atelier_api.users.models import User  # noqa: F401

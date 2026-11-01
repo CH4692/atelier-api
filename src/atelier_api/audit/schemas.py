@@ -12,6 +12,7 @@ class AuditDetails(BaseModel):
     """Allow only non-secret identifiers, roles and repair states in event details."""
 
     model_config = ConfigDict(extra="forbid")
+    repair_order_id: int | None = Field(default=None, gt=0)
     previous_status: RepairStatus | None = None
     new_status: RepairStatus | None = None
     previous_role: UserRole | None = None
