@@ -25,6 +25,7 @@ def test_customer_instruments_return_instrument_schema(client, mock_session):
     assert response.status_code == 200
     assert response.json() == [
         {
+            "is_archived": False,
             "id": 42,
             "type": "violin",
             "maker": "Example maker",

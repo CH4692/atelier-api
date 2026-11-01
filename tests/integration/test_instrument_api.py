@@ -34,6 +34,7 @@ def test_register_instrument_persists_details_and_customer(
     assert isinstance(created["id"], int)
     assert created["id"] > 0
     assert created == {
+        "is_archived": False,
         **payload,
         "id": created["id"],
         "ownership": "customer",

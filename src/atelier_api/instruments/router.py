@@ -15,6 +15,7 @@ from atelier_api.database import SessionDep
 from .models import Instrument, InstrumentOwnershipEvent
 from .ownership import ownership_changes, set_ownership_actor
 from .schemas import (
+    InstrumentArchiveUpdate,
     InstrumentCreate,
     InstrumentOwnership,
     InstrumentOwnershipRead,
@@ -48,6 +49,7 @@ instruments_router = APIRouter(prefix="/instruments", tags=["instruments"])
 def get_instruments(
     session: SessionDep,
     response: Response,
+    include_archived: bool = False,
     ownership: InstrumentOwnership | None = None,
     type: InstrumentType | None = None,
     q: Annotated[str | None, Query(max_length=200)] = None,
@@ -63,9 +65,12 @@ def get_instruments(
     matching instruments. Filters are combined with AND. Sorting puts nulls
     last and uses ascending ID to resolve ties. Default order is ascending ID.
     X-Total-Count includes matches beyond the page, even for empty pages.
+    Archived instruments are hidden unless include_archived is true.
     Count and page queries may observe concurrent committed changes.
     """
     statement = select(Instrument)
+    if not include_archived:
+        statement = statement.where(col(Instrument.is_archived).is_(False))
     if ownership is not None:
         statement = statement.where(Instrument.ownership == ownership)
     if type is not None:
@@ -315,6 +320,42 @@ def update_instrument(
         record_event(
             session,
             AuditAction.INSTRUMENT_UPDATED,
+            AuditResource.INSTRUMENT,
+            instrument.id,
+            actor_id=session.info.get("audit_actor_id"),
+        )
+        session.commit()
+        session.refresh(instrument)
+    return InstrumentRead.model_validate(instrument)
+
+
+@instruments_router.patch(
+    "/{instrument_id}/archive",
+    summary="Archive or restore an instrument without deleting its history",
+    response_model=InstrumentRead,
+    responses={404: {"description": "Instrument not found"}},
+)
+def set_instrument_archive(
+    instrument_id: int, data: InstrumentArchiveUpdate, session: SessionDep
+) -> InstrumentRead:
+    """Serialize archive changes and record their audit event in one transaction.
+
+    Repeating the same state is a no-op. Archive status changes do not detach
+    customers, repair orders or photos, and do not alter the stable public ID.
+    """
+    instrument = session.exec(
+        select(Instrument).where(Instrument.id == instrument_id).with_for_update()
+    ).first()
+    if instrument is None:
+        raise HTTPException(404, "Instrument not found")
+    if instrument.is_archived != data.is_archived:
+        instrument.is_archived = data.is_archived
+        session.add(instrument)
+        record_event(
+            session,
+            AuditAction.INSTRUMENT_ARCHIVED
+            if data.is_archived
+            else AuditAction.INSTRUMENT_RESTORED,
             AuditResource.INSTRUMENT,
             instrument.id,
             actor_id=session.info.get("audit_actor_id"),

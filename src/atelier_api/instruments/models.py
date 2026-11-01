@@ -21,6 +21,7 @@ class Instrument(InstrumentBase, table=True):
     """
 
     __table_args__ = (
+        Index("ix_instrument_is_archived_id", "is_archived", "id"),
         CheckConstraint(
             "body_length_mm > 0 AND body_length_mm < 'Infinity'::double precision",
             name="ck_instrument_body_length",
@@ -48,6 +49,11 @@ class Instrument(InstrumentBase, table=True):
         default_factory=uuid4,
         unique=True,
         sa_column_kwargs={"server_default": text("gen_random_uuid()")},
+    )
+    is_archived: bool = Field(
+        default=False,
+        nullable=False,
+        sa_column_kwargs={"server_default": text("false")},
     )
     customer: Customer | None = Relationship()
 

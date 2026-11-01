@@ -117,3 +117,8 @@ purge approval, purge start, failure and completion. Scheduled events have a UUI
 removal; its audit reference remains. Hold reasons and filenames are not included.
 Purge start occurs once, while failed retry attempts have their own job IDs. See
 [instrument photo management](instrument-photos.md) for upload reconciliation.
+
+Instrument archive transitions record `instrument.archived` and
+`instrument.restored` atomically with the instrument state. Repeated requests for
+the current state produce no duplicate event. Archive does not change ownership
+or erase historical resource references; see [instrument archival](instrument-archive.md).

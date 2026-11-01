@@ -32,20 +32,21 @@ customers_router = APIRouter(prefix="/customers")
         503: {"description": "Database unavailable"},
     },
 )
-def get_customer_overview(customer_id: int, session: SessionDep) -> CustomerOverview:
+def get_customer_overview(
+    customer_id: int, session: SessionDep, include_archived: bool = False
+) -> CustomerOverview:
     """Include archived customers and only their currently assigned instruments.
 
-    Instruments are sorted by ID. An existing customer without instruments has
+    Archived instruments require include_archived=true. Instruments are sorted by ID. An existing customer without instruments has
     an empty instrument list; an unknown customer returns 404.
     """
     customer = session.get(Customer, customer_id)
     if customer is None:
         raise HTTPException(404, "Customer not found")
-    instruments = session.exec(
-        select(Instrument)
-        .where(Instrument.customer_id == customer_id)
-        .order_by(col(Instrument.id))
-    ).all()
+    statement = select(Instrument).where(Instrument.customer_id == customer_id)
+    if not include_archived:
+        statement = statement.where(col(Instrument.is_archived).is_(False))
+    instruments = session.exec(statement.order_by(col(Instrument.id))).all()
     return CustomerOverview(
         customer=CustomerRead.model_validate(customer),
         instruments=[

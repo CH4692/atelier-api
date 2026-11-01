@@ -58,6 +58,7 @@ def test_migration_creates_instrument_constraints_and_customer_reference(
     assert {column["name"] for column in inspector.get_columns("instrument")} == {
         "id",
         "public_id",
+        "is_archived",
         "type",
         "maker",
         "year_of_manufacture",

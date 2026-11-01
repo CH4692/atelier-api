@@ -24,6 +24,7 @@ def test_register_instrument_without_customer(
     response = client.post("/api/v1/instruments", json={"type": instrument_type.value})
     assert response.status_code == 201
     assert response.json() == {
+        "is_archived": False,
         "id": 42,
         "type": instrument_type.value,
         "maker": None,
@@ -58,6 +59,7 @@ def test_register_instrument_with_existing_customer(client, instrument_session):
     response = client.post("/api/v1/instruments", json=payload)
     assert response.status_code == 201
     assert response.json() == {
+        "is_archived": False,
         **payload,
         "id": 42,
         "ownership": "customer",
@@ -153,6 +155,7 @@ def test_list_instruments_returns_schema_fields(client, mock_session):
     assert response.status_code == 200
     assert response.json() == [
         {
+            "is_archived": False,
             "id": 1,
             "type": "violin",
             "maker": "Example maker",
@@ -165,6 +168,7 @@ def test_list_instruments_returns_schema_fields(client, mock_session):
             "bow_weight_g": None,
         },
         {
+            "is_archived": False,
             "id": 2,
             "type": "cello",
             "maker": None,
@@ -215,6 +219,7 @@ def test_get_instrument_returns_details_and_customer_id(
     response = client.get("/api/v1/instruments/42")
     assert response.status_code == 200
     assert response.json() == {
+        "is_archived": False,
         "id": 42,
         "type": "violin",
         "maker": "Example maker",
@@ -285,6 +290,7 @@ def test_update_instrument_changes_details(
     response = client.patch("/api/v1/instruments/42", json=payload)
     assert response.status_code == 200
     assert response.json() == {
+        "is_archived": False,
         "id": 42,
         "customer_id": 7,
         "ownership": "customer",
@@ -340,6 +346,7 @@ def test_update_instrument_clears_optional_fields(
     response = client.patch("/api/v1/instruments/42", json=payload)
     assert response.status_code == 200
     assert response.json() == {
+        "is_archived": False,
         "id": 42,
         "type": "violin",
         "ownership": "unassigned",

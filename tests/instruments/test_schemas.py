@@ -27,6 +27,7 @@ def test_accepts_complete_instrument():
         customer_id=2,
     )
     assert instrument.model_dump(mode="json") == {
+        "is_archived": False,
         "id": 1,
         "type": "violin",
         "maker": "Example maker",

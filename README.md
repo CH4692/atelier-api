@@ -1128,3 +1128,13 @@ Der separate Befehl `atelier-photos-purge --dry-run` zeigt Löschkandidaten an.
 Dauerhafte Löschung ist standardmäßig deaktiviert und erfordert zusätzlich eine
 explizite Freigabe je Foto. Betrieb und Render-Cron-Konfiguration:
 [Photo retention](docs/photo-retention.md).
+
+### Instrumente archivieren
+
+`PATCH /api/v1/instruments/{id}/archive` mit `{"is_archived":true}` archiviert ein
+Instrument; `false` stellt es wieder her. Standardlisten blenden archivierte
+Instrumente aus, `include_archived=true` schließt sie ein. Historie, Dokumente,
+Fotos und QR-Links bleiben für berechtigte Mitarbeiter erreichbar. Geschützte
+Referenzen verhindern eine permanente Löschung weiterhin mit HTTP 409.
+Details und die spätere Mietvertrags-Erweiterung:
+[Instrument archival](docs/instrument-archive.md).
