@@ -252,6 +252,13 @@ def download_document(document_id: int, session: SessionDep) -> Response:
 
 
 @router.post(
+    "/repairs",
+    response_model=RepairOrderRead,
+    status_code=201,
+    summary="Register repair intake for an existing customer and instrument",
+    responses={404: {"description": "Customer or instrument not found"}},
+)
+@router.post(
     "/repair-orders",
     response_model=RepairOrderRead,
     status_code=201,

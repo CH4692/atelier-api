@@ -14,6 +14,11 @@ from tests.integration.auth_helpers import sign_in
 pytestmark = pytest.mark.integration
 
 
+@pytest.fixture(params=["/api/v1/repairs", "/api/v1/repair-orders"])
+def repair_endpoint(request):
+    return request.param
+
+
 @pytest.fixture
 def intake(auth_factory):
     client = auth_factory()
@@ -33,10 +38,12 @@ def intake(auth_factory):
 
 
 @pytest.mark.e2e
-def test_managed_order_persists_intake_and_is_readable(intake, db_connection, accounts):
+def test_managed_order_persists_intake_and_is_readable(
+    intake, db_connection, accounts, repair_endpoint
+):
     client, customer, instrument, payload = intake
     before = datetime.now(UTC)
-    response = client.post("/api/v1/repair-orders", json=payload)
+    response = client.post(repair_endpoint, json=payload)
     assert response.status_code == 201, response.text
     created = response.json()
     assert isinstance(created["id"], int)
@@ -54,7 +61,7 @@ def test_managed_order_persists_intake_and_is_readable(intake, db_connection, ac
     assert client.get(f"/api/v1/instruments/{instrument['id']}/history").json()[
         "repair_orders"
     ] == [detail.json()]
-    again = client.post("/api/v1/repair-orders", json=payload).json()
+    again = client.post(repair_endpoint, json=payload).json()
     assert again["id"] != created["id"]
     with Session(
         bind=db_connection, join_transaction_mode="create_savepoint"
@@ -74,10 +81,12 @@ def test_managed_order_persists_intake_and_is_readable(intake, db_connection, ac
         assert events[0].details == {}
 
 
-def test_explicit_dates_status_and_internal_notes_are_stored(intake, db_connection):
+def test_explicit_dates_status_and_internal_notes_are_stored(
+    intake, db_connection, repair_endpoint
+):
     client, _, _, payload = intake
     response = client.post(
-        "/api/v1/repair-orders",
+        repair_endpoint,
         json={
             **payload,
             "accepted_at": "2026-11-01T14:00:00+02:00",
@@ -120,36 +129,34 @@ def test_explicit_dates_status_and_internal_notes_are_stored(intake, db_connecti
         {"extra": True},
     ],
 )
-def test_invalid_order_input_is_rejected(intake, change):
+def test_invalid_order_input_is_rejected(intake, change, repair_endpoint):
     client, _, _, payload = intake
-    assert (
-        client.post("/api/v1/repair-orders", json={**payload, **change}).status_code
-        == 422
-    )
+    assert client.post(repair_endpoint, json={**payload, **change}).status_code == 422
 
 
 @pytest.mark.parametrize(
     "missing", ["customer_id", "instrument_id", "work_description"]
 )
-def test_intake_requires_both_relationships_and_description(intake, missing):
+def test_intake_requires_both_relationships_and_description(
+    intake, missing, repair_endpoint
+):
     client, _, _, payload = intake
     data = {key: value for key, value in payload.items() if key != missing}
-    assert client.post("/api/v1/repair-orders", json=data).status_code == 422
+    assert client.post(repair_endpoint, json=data).status_code == 422
 
 
 @pytest.mark.parametrize("field", ["customer_id", "instrument_id"])
-def test_missing_references_return_404(intake, db_connection, field):
+def test_missing_references_return_404(intake, db_connection, field, repair_endpoint):
     client, _, _, payload = intake
     assert (
-        client.post(
-            "/api/v1/repair-orders", json={**payload, field: 999999}
-        ).status_code
-        == 404
+        client.post(repair_endpoint, json={**payload, field: 999999}).status_code == 404
     )
     assert db_connection.scalar(text("SELECT count(*) FROM repair_order")) == 0
 
 
-def test_customer_reference_survives_ownership_and_archive_changes(intake):
+def test_customer_reference_survives_ownership_and_archive_changes(
+    intake, repair_endpoint
+):
     client, customer, instrument, payload = intake
     other = client.post(
         "/api/v1/customers",
@@ -157,7 +164,7 @@ def test_customer_reference_survives_ownership_and_archive_changes(intake):
     ).json()
     # A contracting customer is not necessarily the current owner.
     order = client.post(
-        "/api/v1/repair-orders", json={**payload, "customer_id": other["id"]}
+        repair_endpoint, json={**payload, "customer_id": other["id"]}
     ).json()
     assert order["customer_id"] == other["id"]
     assert (
@@ -187,10 +194,10 @@ def test_customer_reference_survives_ownership_and_archive_changes(intake):
 
 
 def test_customer_and_instrument_deletion_are_blocked_without_audit_success(
-    intake, db_connection
+    intake, db_connection, repair_endpoint
 ):
     client, customer, instrument, payload = intake
-    order = client.post("/api/v1/repair-orders", json=payload).json()
+    order = client.post(repair_endpoint, json=payload).json()
     assert (
         client.patch(
             f"/api/v1/repair-orders/{order['id']}/archive", json={"is_archived": True}
@@ -235,10 +242,10 @@ def test_customer_and_instrument_deletion_are_blocked_without_audit_success(
     ],
 )
 def test_database_constraints_reject_invalid_relationships_and_fields(
-    intake, db_connection, assignment
+    intake, db_connection, assignment, repair_endpoint
 ):
     client, _, _, payload = intake
-    order = client.post("/api/v1/repair-orders", json=payload).json()
+    order = client.post(repair_endpoint, json=payload).json()
     with Session(
         bind=db_connection, join_transaction_mode="create_savepoint"
     ) as session:
@@ -250,7 +257,9 @@ def test_database_constraints_reject_invalid_relationships_and_fields(
         session.rollback()
 
 
-def test_intake_audit_and_order_roll_back_together(intake, db_connection, monkeypatch):
+def test_intake_audit_and_order_roll_back_together(
+    intake, db_connection, monkeypatch, repair_endpoint
+):
     from atelier_api.repair_orders import service
 
     client, _, _, payload = intake
@@ -262,7 +271,7 @@ def test_intake_audit_and_order_roll_back_together(intake, db_connection, monkey
 
     monkeypatch.setattr(service, "record_event", fail)
     with pytest.raises(SQLAlchemyError):
-        client.post("/api/v1/repair-orders", json=payload)
+        client.post(repair_endpoint, json=payload)
     assert db_connection.scalar(text("SELECT count(*) FROM repair_order")) == 0
     assert (
         db_connection.scalar(
@@ -275,13 +284,15 @@ def test_intake_audit_and_order_roll_back_together(intake, db_connection, monkey
 @pytest.mark.parametrize(
     "role,expected", [(None, 401), ("customer", 403), ("employee", 404), ("admin", 404)]
 )
-def test_managed_orders_require_workshop_access(auth_factory, role, expected):
+def test_managed_orders_require_workshop_access(
+    auth_factory, role, expected, repair_endpoint
+):
     client = auth_factory(customer_portal_auth_enabled=True)
     if role:
         sign_in(client, role)
     assert (
         client.post(
-            "/api/v1/repair-orders",
+            repair_endpoint,
             json={
                 "customer_id": 999999,
                 "instrument_id": 999999,
@@ -292,11 +303,11 @@ def test_managed_orders_require_workshop_access(auth_factory, role, expected):
     )
 
 
-def test_managed_orders_require_csrf(intake):
+def test_managed_orders_require_csrf(intake, repair_endpoint):
     client, _, _, payload = intake
     assert (
         client.post(
-            "/api/v1/repair-orders",
+            repair_endpoint,
             json=payload,
             headers={"Origin": "https://attacker.example"},
         ).status_code

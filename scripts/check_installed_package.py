@@ -35,6 +35,7 @@ def main() -> None:
         "/api/v1/customers/{customer_id}/instruments",
         "/health/live",
         "/health/ready",
+        "/api/v1/repairs",
         "/api/v1/repair-orders",
         "/api/v1/repair-orders/{order_id}",
         "/api/v1/instruments",
