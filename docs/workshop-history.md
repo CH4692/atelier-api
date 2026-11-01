@@ -117,7 +117,9 @@ dieses Feature richtet keinen externen Dokumenten- oder Backupdienst ein.
 
 ## Customer-linked repair intake
 
-`POST /api/v1/repair-orders` accepts new managed orders:
+`POST /api/v1/repairs` accepts new managed orders. All business API paths use
+the `/api/v1` prefix; `/repairs` is relative to that prefix. The existing
+`POST /api/v1/repair-orders` remains available with the same behavior and schema:
 
 ```json
 {
