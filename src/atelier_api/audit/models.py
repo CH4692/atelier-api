@@ -22,6 +22,7 @@ class AuditAction(StrEnum):
     INSTRUMENT_RESTORED = "instrument.restored"
     INSTRUMENT_DELETED = "instrument.deleted"
     REPAIR_ORDER_CREATED = "repair_order.created"
+    REPAIR_ORDER_UPDATED = "repair_order.updated"
     REPAIR_ORDER_ARCHIVED = "repair_order.archived"
     REPAIR_ORDER_RESTORED = "repair_order.restored"
     REPAIR_DOCUMENT_CREATED = "repair_document.created"

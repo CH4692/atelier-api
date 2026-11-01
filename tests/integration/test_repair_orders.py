@@ -522,3 +522,202 @@ def test_repair_reads_require_workshop_access(auth_factory, path, role, expected
     if role:
         assert sign_in(client, role).status_code == 200
     assert client.get(path).status_code == expected
+
+
+@pytest.mark.parametrize(
+    "change,normalized",
+    [
+        (
+            {"work_description": "  Revised bridge work  "},
+            {"work_description": "Revised bridge work"},
+        ),
+        (
+            {"expected_completion_date": "2026-12-10"},
+            {"expected_completion_date": "2026-12-10"},
+        ),
+        (
+            {"internal_notes": "  Customer requested estimate  "},
+            {"internal_notes": "Customer requested estimate"},
+        ),
+        ({"expected_completion_date": None}, {"expected_completion_date": None}),
+        ({"internal_notes": None}, {"internal_notes": None}),
+        ({"internal_notes": "   "}, {"internal_notes": None}),
+        (
+            {
+                "work_description": "Revised work",
+                "expected_completion_date": None,
+                "internal_notes": None,
+            },
+            {
+                "work_description": "Revised work",
+                "expected_completion_date": None,
+                "internal_notes": None,
+            },
+        ),
+    ],
+)
+def test_repair_patch_changes_only_supplied_fields_and_audits(
+    intake, db_connection, accounts, change, normalized
+):
+    client, _, _, payload = intake
+    before = client.post(
+        "/api/v1/repairs",
+        json={
+            **payload,
+            "expected_completion_date": "2026-12-01",
+            "internal_notes": "Original notes",
+        },
+    ).json()
+    response = client.patch(f"/api/v1/repairs/{before['id']}", json=change)
+    assert response.status_code == 200, response.text
+    assert response.json() == {**before, **normalized}
+    assert response.headers["Cache-Control"] == "private, no-store"
+    assert client.get(f"/api/v1/repairs/{before['id']}").json() == {
+        **before,
+        **normalized,
+        "documents": [],
+    }
+    with Session(
+        bind=db_connection, join_transaction_mode="create_savepoint"
+    ) as session:
+        stored = session.get(RepairOrder, before["id"])
+        assert stored.work_description == response.json()["work_description"]
+        assert stored.internal_notes == response.json()["internal_notes"]
+        events = session.exec(
+            select(AuditEvent).where(
+                AuditEvent.action == "repair_order.updated",
+                AuditEvent.resource_id == before["id"],
+            )
+        ).all()
+        assert len(events) == 1
+        assert events[0].actor_id == accounts["employee"]
+        assert events[0].resource_type == "repair_order"
+        assert events[0].succeeded is True
+        assert events[0].details == {}
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {},
+        {"work_description": "  Replace the bridge  "},
+        {"internal_notes": None},
+        {"expected_completion_date": None},
+    ],
+)
+def test_repair_patch_no_op_does_not_write_audit(intake, db_connection, change):
+    client, _, _, payload = intake
+    order = client.post("/api/v1/repairs", json=payload).json()
+    response = client.patch(f"/api/v1/repairs/{order['id']}", json=change)
+    assert response.status_code == 200
+    assert response.json() == order
+    assert (
+        db_connection.scalar(
+            text("SELECT count(*) FROM audit_event WHERE action='repair_order.updated'")
+        )
+        == 0
+    )
+
+
+@pytest.mark.parametrize("change", [{}, {"work_description": "Updated work"}])
+def test_repair_patch_unknown_order_returns_404(intake, change):
+    client, _, _, _ = intake
+    assert client.patch("/api/v1/repairs/999999", json=change).status_code == 404
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_repair_patch_preserves_archived_order_history_and_documents(intake, legacy):
+    client, _, instrument, payload = intake
+    if legacy:
+        order = client.post(
+            f"/api/v1/instruments/{instrument['id']}/repair-orders",
+            json={
+                "work_description": "Old work",
+                "performed_at": "2025-01-01T00:00:00Z",
+            },
+        ).json()
+    else:
+        order = client.post("/api/v1/repairs", json=payload).json()
+    document = client.post(
+        f"/api/v1/repair-orders/{order['id']}/documents?filename=work.pdf",
+        content=b"Historical document",
+    ).json()
+    assert (
+        client.patch(
+            f"/api/v1/repair-orders/{order['id']}/archive", json={"is_archived": True}
+        ).status_code
+        == 200
+    )
+    response = client.patch(
+        f"/api/v1/repairs/{order['id']}", json={"work_description": "Corrected work"}
+    )
+    assert response.status_code == 200
+    assert response.json() == {
+        **order,
+        "is_archived": True,
+        "work_description": "Corrected work",
+    }
+    assert client.get(f"/api/v1/repairs/{order['id']}").json()["documents"] == [
+        document
+    ]
+
+
+@pytest.mark.parametrize(
+    "role,expected", [(None, 401), ("customer", 403), ("employee", 404), ("admin", 404)]
+)
+def test_repair_patch_requires_workshop_access(auth_factory, role, expected):
+    client = auth_factory(customer_portal_auth_enabled=True)
+    if role:
+        assert sign_in(client, role).status_code == 200
+    assert (
+        client.patch(
+            "/api/v1/repairs/999999", json={"internal_notes": "Updated"}
+        ).status_code
+        == expected
+    )
+
+
+def test_repair_patch_requires_csrf(intake):
+    client, _, _, payload = intake
+    order = client.post("/api/v1/repairs", json=payload).json()
+    assert (
+        client.patch(
+            f"/api/v1/repairs/{order['id']}",
+            json={"internal_notes": "Updated"},
+            headers={"Origin": "https://attacker.example"},
+        ).status_code
+        == 403
+    )
+    assert client.get(f"/api/v1/repairs/{order['id']}").json()["internal_notes"] is None
+
+
+def test_repair_patch_rolls_back_with_audit_failure(intake, db_connection, monkeypatch):
+    from atelier_api.repair_orders import service
+
+    client, _, _, payload = intake
+    order = client.post("/api/v1/repairs", json=payload).json()
+    original = service.record_event
+
+    def fail(*args, **kwargs):
+        original(*args, **kwargs)
+        raise SQLAlchemyError("Simulated audit failure")
+
+    monkeypatch.setattr(service, "record_event", fail)
+    with pytest.raises(SQLAlchemyError, match="Simulated audit failure"):
+        client.patch(
+            f"/api/v1/repairs/{order['id']}",
+            json={
+                "work_description": "Must roll back",
+                "internal_notes": "Must roll back",
+            },
+        )
+    assert client.get(f"/api/v1/repairs/{order['id']}").json() == {
+        **order,
+        "documents": [],
+    }
+    assert (
+        db_connection.scalar(
+            text("SELECT count(*) FROM audit_event WHERE action='repair_order.updated'")
+        )
+        == 0
+    )

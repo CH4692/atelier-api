@@ -15,6 +15,7 @@ from .schemas import (
     RepairOrderDetail,
     RepairOrderRead,
     RepairOrderRegister,
+    RepairOrderUpdate,
 )
 
 
@@ -88,3 +89,32 @@ def register_order(session: Session, data: RepairOrderRegister) -> RepairOrderRe
     if instrument is None:
         raise HTTPException(404, "Instrument not found")
     return persist_order(session, RepairOrder(**data.model_dump()))
+
+
+def update_order(
+    session: Session, repair_id: int, data: RepairOrderUpdate
+) -> RepairOrderRead:
+    """Serialize partial updates and commit changes with a content-free audit."""
+    order = session.execute(
+        select(RepairOrder).where(col(RepairOrder.id) == repair_id).with_for_update()
+    ).scalar_one_or_none()
+    if order is None:
+        raise HTTPException(404, "Repair order not found")
+    changes = {
+        name: value
+        for name, value in data.model_dump(exclude_unset=True).items()
+        if getattr(order, name) != value
+    }
+    if changes:
+        order.sqlmodel_update(changes)
+        session.add(order)
+        record_event(
+            session,
+            AuditAction.REPAIR_ORDER_UPDATED,
+            AuditResource.REPAIR_ORDER,
+            order.id,
+            actor_id=session.info.get("audit_actor_id"),
+        )
+        session.commit()
+        session.refresh(order)
+    return RepairOrderRead.model_validate(order)

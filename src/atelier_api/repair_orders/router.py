@@ -23,8 +23,9 @@ from .schemas import (
     RepairOrderDetail,
     RepairOrderRead,
     RepairOrderRegister,
+    RepairOrderUpdate,
 )
-from .service import persist_order, register_order, repair_details
+from .service import persist_order, register_order, repair_details, update_order
 from .statuses import RepairStatus
 
 router = APIRouter(
@@ -335,3 +336,22 @@ def register_repair_order(
     instrument remain referenced independently of later ownership changes.
     """
     return register_order(session, data)
+
+
+@router.patch(
+    "/repairs/{repair_id}",
+    response_model=RepairOrderRead,
+    summary="Update a repair description, expected completion date or internal notes",
+    responses={404: {"description": "Repair order not found"}},
+)
+def update_repair(
+    repair_id: int, data: RepairOrderUpdate, session: SessionDep, response: Response
+) -> RepairOrderRead:
+    """Preserve omitted fields; clear optional dates and notes with null.
+
+    Descriptions cannot be null or blank. Empty patches and unchanged values
+    return the current order without creating an update audit event.
+    """
+    result = update_order(session, repair_id, data)
+    response.headers["Cache-Control"] = "private, no-store"
+    return result

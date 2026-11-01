@@ -177,3 +177,23 @@ including archived orders, or HTTP 404 if unknown. The existing
 `GET /api/v1/repair-orders/{order_id}` remains available. Both new GET endpoints
 require staff authorization and return `Cache-Control: private, no-store`. List
 responses exclude document contents and metadata; details include metadata only.
+
+## Update repair orders
+
+`PATCH /api/v1/repairs/{repair_id}` accepts any subset of `work_description`,
+`expected_completion_date` and `internal_notes` and returns HTTP 200 with the
+updated order. Omitted fields retain their values. A description must contain
+1–10000 characters after trimming; null and blank descriptions return HTTP 422.
+An ISO date or null sets or clears the expected completion date. Notes accept
+up to 10000 characters; null or blank text clears them. Unknown fields and
+invalid values return HTTP 422, unknown orders HTTP 404 (also for empty patches).
+
+Customer/instrument references, status, acceptance/execution timestamps and archive
+state cannot be changed through this patch. Archived and historical orders remain
+editable by authorized staff. Documents and historical customer references are
+preserved. An empty patch or unchanged normalized values are a no-op. Actual
+changes append `repair_order.updated` with actor/resource IDs in the same
+transaction; descriptions and notes are not copied into the audit trail.
+Concurrent updates lock the order while applying only supplied fields. The
+response uses `Cache-Control: private, no-store`; authentication, staff access
+and CSRF protection apply as for order creation.
