@@ -60,6 +60,7 @@ def test_instrument_details_and_customer_relationship_persist(
         assert InstrumentRead.model_validate(stored).model_dump(mode="json") == {
             **payload.model_dump(mode="json"),
             "id": instrument_id,
+            "is_archived": False,
         }
 
 

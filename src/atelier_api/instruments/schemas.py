@@ -8,6 +8,7 @@ from pydantic import (
     AwareDatetime,
     FiniteFloat,
     Strict,
+    StrictBool,
     field_validator,
     model_validator,
 )
@@ -146,6 +147,14 @@ class InstrumentRead(InstrumentBase):
     """Represent a stored instrument with its database-generated identifier."""
 
     id: int
+    is_archived: bool = False
+
+
+class InstrumentArchiveUpdate(SQLModel):
+    """Change archive state independently of instrument and ownership updates."""
+
+    model_config = {"extra": "forbid"}
+    is_archived: StrictBool
 
 
 class InstrumentUpdate(SQLModel):

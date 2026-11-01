@@ -1,7 +1,7 @@
 """Expose the current instruments associated with a customer."""
 
 from fastapi import APIRouter, HTTPException, status
-from sqlmodel import select
+from sqlmodel import col, select
 
 from atelier_api.customers.models import Customer
 from atelier_api.database import SessionDep
@@ -22,12 +22,13 @@ customer_instruments_router = APIRouter(prefix="/customers", tags=["customers"])
     },
 )
 def get_customer_instruments(
-    customer_id: int, session: SessionDep
+    customer_id: int, session: SessionDep, include_archived: bool = False
 ) -> list[InstrumentRead]:
     """Return only instruments currently associated with the customer.
 
     An existing customer without instruments returns an empty list. This is
-    the current association, not a historical ownership record. Unassigned
+    the current association, not a historical ownership record. Archived instruments
+    are excluded unless include_archived is true. Unassigned
     instruments are excluded. Results have no explicit ordering or pagination.
 
     Raises:
@@ -39,7 +40,8 @@ def get_customer_instruments(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Customer not found",
         )
-    instruments = session.exec(
-        select(Instrument).where(Instrument.customer_id == customer_id)
-    ).all()
+    statement = select(Instrument).where(Instrument.customer_id == customer_id)
+    if not include_archived:
+        statement = statement.where(col(Instrument.is_archived).is_(False))
+    instruments = session.exec(statement).all()
     return [InstrumentRead.model_validate(instrument) for instrument in instruments]

@@ -554,7 +554,7 @@ def test_retention_migration_preserves_data_and_guards_holds(postgres_engine):
                 ),
                 {"id": photo_id, "now": NOW},
             )
-        failed = migrate("downgrade", "-1", success=False)
+        failed = migrate("downgrade", "f97c28d60a45", success=False)
         assert "Reconcile purging photographs and retention holds" in failed.stderr
         with engine.begin() as connection:
             connection.execute(
@@ -563,7 +563,7 @@ def test_retention_migration_preserves_data_and_guards_holds(postgres_engine):
                 ),
                 {"id": photo_id},
             )
-        migrate("downgrade", "-1")
+        migrate("downgrade", "f97c28d60a45")
         with engine.connect() as connection:
             assert connection.scalar(text("SELECT count(*) FROM instrument_photo")) == 1
         migrate("upgrade", "head")
