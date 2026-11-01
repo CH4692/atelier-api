@@ -61,6 +61,30 @@ class RepairOrderRegister(BaseModel):
         return None
 
 
+class RepairOrderUpdate(BaseModel):
+    """Preserve omitted fields; allow null only for the date and internal notes."""
+
+    model_config = ConfigDict(extra="forbid")
+    work_description: Annotated[
+        str | None,
+        StringConstraints(strip_whitespace=True, min_length=1, max_length=10000),
+    ] = None
+    expected_completion_date: date | None = None
+    internal_notes: str | None = Field(default=None, max_length=10000)
+
+    @field_validator("work_description")
+    @classmethod
+    def require_description(cls, value: str | None) -> str:
+        if value is None:
+            raise ValueError("Repair description cannot be null")
+        return value
+
+    @field_validator("internal_notes")
+    @classmethod
+    def normalize_notes(cls, value: str | None) -> str | None:
+        return value.strip() or None if value is not None else None
+
+
 class ArchiveUpdate(BaseModel):
     """Change visibility state without deleting work or documents."""
 

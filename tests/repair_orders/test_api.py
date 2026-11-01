@@ -210,3 +210,34 @@ def test_repair_read_endpoints_are_documented():
     }
     assert "X-Total-Count" in listing["responses"]["200"]["headers"]
     assert "404" in paths["/api/v1/repairs/{repair_id}"]["get"]["responses"]
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"work_description": None},
+        {"work_description": "   "},
+        {"work_description": "x" * 10001},
+        {"work_description": 123},
+        {"internal_notes": "x" * 10001},
+        {"internal_notes": ["invalid"]},
+        {"expected_completion_date": "not-a-date"},
+        {"expected_completion_date": "2026-02-30"},
+        {"customer_id": 1},
+        {"instrument_id": 1},
+        {"status": "completed"},
+        {"accepted_at": "2026-11-01T00:00:00Z"},
+        {"performed_at": "2026-11-01T00:00:00Z"},
+        {"is_archived": True},
+    ],
+)
+def test_repair_patch_validates_before_database_access(client, mock_session, payload):
+    response = client.patch("/api/v1/repairs/7", json=payload)
+    assert response.status_code == 422
+    mock_session.execute.assert_not_called()
+    mock_session.commit.assert_not_called()
+
+
+def test_repair_patch_is_documented():
+    operation = app.openapi()["paths"]["/api/v1/repairs/{repair_id}"]["patch"]
+    assert {"200", "401", "403", "404", "422"} <= operation["responses"].keys()
