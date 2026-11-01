@@ -24,8 +24,15 @@ from .schemas import (
     RepairOrderRead,
     RepairOrderRegister,
     RepairOrderUpdate,
+    RepairStatusUpdate,
 )
-from .service import persist_order, register_order, repair_details, update_order
+from .service import (
+    change_status,
+    persist_order,
+    register_order,
+    repair_details,
+    update_order,
+)
 from .statuses import RepairStatus
 
 router = APIRouter(
@@ -355,3 +362,20 @@ def update_repair(
     result = update_order(session, repair_id, data)
     response.headers["Cache-Control"] = "private, no-store"
     return result
+
+
+@router.patch(
+    "/repairs/{repair_id}/status",
+    response_model=RepairOrderRead,
+    summary="Change repair status through the validated state machine",
+    responses={
+        404: {"description": "Repair order not found"},
+        409: {"description": "Status transition is not permitted"},
+    },
+)
+def update_repair_status(
+    repair_id: int, data: RepairStatusUpdate, session: SessionDep, response: Response
+) -> RepairOrderRead:
+    """Timestamp actual changes; preserve the timestamp for idempotent retries."""
+    response.headers["Cache-Control"] = "private, no-store"
+    return change_status(session, repair_id, data.status)
