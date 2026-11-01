@@ -141,9 +141,11 @@ input returns HTTP 422. No notes or descriptions are copied into audit events.
 
 `status` defaults to `accepted` and accepts `accepted`, `awaiting_approval`,
 `in_progress`, `awaiting_materials`, `ready_for_pickup`, `completed`, and
-`cancelled`. This intake API stores a status; it does not introduce a status
-transition API, approval, pricing or invoicing workflow. Details and instrument
-history include these fields. Internal notes share the existing staff-only
+`cancelled`. Subsequent status changes use
+`PATCH /api/v1/repairs/{repair_id}/status` and the state machine documented in
+[Repair status tracking](repair-status.md). Details, lists and instrument history
+include `status_updated_at`; unknown historical change dates remain null.
+Approval, pricing and invoicing workflows are separate features. Internal notes share the existing staff-only
 authorization of repair records and are never exposed to customer accounts.
 
 Migration `2caf51093d78` preserves existing repair IDs, execution timestamps and

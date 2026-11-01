@@ -1,10 +1,13 @@
 """Compose repair history in batches without loading document contents."""
 
+from datetime import UTC, datetime
+
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlmodel import Session, col
 
 from atelier_api.audit.models import AuditAction, AuditResource
+from atelier_api.audit.schemas import AuditDetails
 from atelier_api.audit.service import record_event
 from atelier_api.customers.models import Customer
 from atelier_api.instruments.models import Instrument
@@ -17,6 +20,7 @@ from .schemas import (
     RepairOrderRegister,
     RepairOrderUpdate,
 )
+from .statuses import RepairStatus, validate_transition
 
 
 def repair_details(
@@ -88,7 +92,9 @@ def register_order(session: Session, data: RepairOrderRegister) -> RepairOrderRe
     ).scalar_one_or_none()
     if instrument is None:
         raise HTTPException(404, "Instrument not found")
-    return persist_order(session, RepairOrder(**data.model_dump()))
+    return persist_order(
+        session, RepairOrder(**data.model_dump(), status_updated_at=data.accepted_at)
+    )
 
 
 def update_order(
@@ -114,6 +120,50 @@ def update_order(
             AuditResource.REPAIR_ORDER,
             order.id,
             actor_id=session.info.get("audit_actor_id"),
+        )
+        session.commit()
+        session.refresh(order)
+    return RepairOrderRead.model_validate(order)
+
+
+def change_status(
+    session: Session, repair_id: int, target: RepairStatus
+) -> RepairOrderRead:
+    """Serialize changes so validation uses the latest committed state.
+
+    Duplicate requests are no-ops, including retries of terminal states. Audit
+    failure rolls back both the status and its timestamp with the request session.
+    """
+    order = session.execute(
+        select(RepairOrder)
+        .where(col(RepairOrder.id) == repair_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).scalar_one_or_none()
+    if order is None:
+        raise HTTPException(404, "Repair order not found")
+    try:
+        validate_transition(order.status, target)
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from None
+    if order.status != target:
+        previous = order.status
+        order.status = target
+        # A backwards wall-clock adjustment must not move the recorded time backwards.
+        order.status_updated_at = max(
+            datetime.now(UTC),
+            order.status_updated_at
+            or order.accepted_at
+            or datetime.min.replace(tzinfo=UTC),
+        )
+        session.add(order)
+        record_event(
+            session,
+            AuditAction.REPAIR_STATUS_CHANGED,
+            AuditResource.REPAIR_ORDER,
+            order.id,
+            actor_id=session.info.get("audit_actor_id"),
+            details=AuditDetails(previous_status=previous, new_status=target),
         )
         session.commit()
         session.refresh(order)

@@ -85,6 +85,13 @@ class RepairOrderUpdate(BaseModel):
         return value.strip() or None if value is not None else None
 
 
+class RepairStatusUpdate(BaseModel):
+    """Request a target state without accepting client-controlled timestamps."""
+
+    model_config = ConfigDict(extra="forbid")
+    status: RepairStatus
+
+
 class ArchiveUpdate(BaseModel):
     """Change visibility state without deleting work or documents."""
 
@@ -123,9 +130,10 @@ class RepairOrderRead(BaseModel):
     accepted_at: AwareDatetime | None = None
     expected_completion_date: date | None = None
     status: RepairStatus = RepairStatus.COMPLETED
+    status_updated_at: AwareDatetime | None = None
     internal_notes: str | None = None
 
-    @field_validator("created_at", "accepted_at", "performed_at")
+    @field_validator("created_at", "accepted_at", "performed_at", "status_updated_at")
     @classmethod
     def normalize_timestamp(cls, value: datetime | None) -> datetime | None:
         return value.astimezone(UTC) if value is not None else None

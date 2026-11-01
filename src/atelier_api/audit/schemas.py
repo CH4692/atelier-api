@@ -4,13 +4,16 @@ from datetime import UTC, datetime
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
+from atelier_api.repair_orders.statuses import RepairStatus
 from atelier_api.users.roles import UserRole
 
 
 class AuditDetails(BaseModel):
-    """Allow only non-secret identifiers and role transitions in event details."""
+    """Allow only non-secret identifiers, roles and repair states in event details."""
 
     model_config = ConfigDict(extra="forbid")
+    previous_status: RepairStatus | None = None
+    new_status: RepairStatus | None = None
     previous_role: UserRole | None = None
     new_role: UserRole | None = None
     previous_customer_id: int | None = Field(default=None, gt=0)

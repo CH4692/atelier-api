@@ -16,6 +16,10 @@ class RepairOrder(SQLModel, table=True):
 
     __tablename__: ClassVar[str] = "repair_order"
     __table_args__ = (
+        CheckConstraint(
+            "status_updated_at IS NULL OR accepted_at IS NULL OR status_updated_at >= accepted_at",
+            name="ck_repair_order_status_time",
+        ),
         Index(
             "ix_repair_order_instrument_performed_id",
             "instrument_id",
@@ -55,6 +59,9 @@ class RepairOrder(SQLModel, table=True):
             length=32,
         ),
         sa_column_kwargs={"server_default": "completed"},
+    )
+    status_updated_at: datetime | None = Field(
+        default=None, sa_type=DateTime(timezone=True)
     )
     internal_notes: str | None = Field(default=None, sa_type=Text)
     created_at: datetime = Field(

@@ -11,6 +11,7 @@ from sqlmodel import Field, SQLModel
 class AuditAction(StrEnum):
     """Enumerate application-controlled actions rather than accepting request text."""
 
+    REPAIR_STATUS_CHANGED = "repair_order.status_changed"
     CUSTOMER_CREATED = "customer.created"
     CUSTOMER_UPDATED = "customer.updated"
     CUSTOMER_DELETED = "customer.deleted"
