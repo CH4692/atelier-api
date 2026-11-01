@@ -4,6 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import col, or_, select
 
 from atelier_api.audit.models import AuditAction, AuditResource
@@ -219,6 +220,7 @@ async def get_customer_by_id(customer_id: int, session: SessionDep) -> CustomerR
     summary="Delete a customer",
     responses={
         404: {"description": "Customer not found"},
+        409: {"description": "Customer has associated historical records"},
         503: {"description": "Database unavailable"},
     },
 )
@@ -263,15 +265,24 @@ def delete_customer(customer_id: int, session: SessionDep) -> Response:
                 previous_customer_id=customer_id, new_customer_id=None
             ),
         )
-    session.delete(customer)
-    record_event(
-        session,
-        AuditAction.CUSTOMER_DELETED,
-        AuditResource.CUSTOMER,
-        customer.id,
-        actor_id=session.info.get("audit_actor_id"),
-    )
-    session.commit()
+    try:
+        session.delete(customer)
+        record_event(
+            session,
+            AuditAction.CUSTOMER_DELETED,
+            AuditResource.CUSTOMER,
+            customer.id,
+            actor_id=session.info.get("audit_actor_id"),
+        )
+        session.commit()
+    except IntegrityError as error:
+        session.rollback()
+        if (
+            getattr(error.orig, "sqlstate", getattr(error.orig, "pgcode", None))
+            != "23503"
+        ):
+            raise
+        raise HTTPException(409, "Customer has associated historical records") from None
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

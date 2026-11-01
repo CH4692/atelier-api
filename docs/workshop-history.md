@@ -25,14 +25,15 @@ zurückgegeben. `created_at` bezeichnet die Erfassung, nicht das Reparaturdatum.
 So können auch frühere Arbeiten nachgetragen werden, ohne historische Daten aus
 der Reihenfolge ihrer Eingabe abzuleiten. Ungültige Angaben ergeben HTTP 422,
 ein unbekanntes Instrument HTTP 404. Die Anlage liefert HTTP 201 und den
-Reparatureintrag mit seiner ID. Aktuell ist dies eine Grundlage für dokumentierte
-Reparaturarbeiten; ein Auftragsstatus-/Freigabe-, Preis- oder Rechnungsworkflow
-wird damit nicht behauptet.
+Reparatureintrag mit seiner ID und dem Status `completed`. Dieser bestehende
+Erfassungsweg bleibt für historische Arbeiten erhalten. Kundenreferenz und
+Annahmezeitpunkt bleiben dabei unbekannt; sie werden nicht aus dem heutigen
+Instrumenteigentümer oder dem Erfassungsdatum abgeleitet.
 
 `GET /api/v1/repair-orders/{order_id}` liefert Beschreibung, Daten und die
 zugehörigen Dokumentmetadaten eines einzelnen Eintrags. Die gemeinsame
 Instrumenthistorie sortiert nach `performed_at` aufsteigend und dann nach ID,
-also älteste Arbeiten zuerst. Ein unbekanntes Instrument ergibt HTTP 404;
+also älteste Arbeiten zuerst. Aufträge ohne Ausführungszeitpunkt stehen danach. Ein unbekanntes Instrument ergibt HTTP 404;
 ein bekanntes Instrument ohne Reparaturen erhält `repair_orders: []`.
 
 Die Reparaturliste wird mit `offset` (Standard 0) und `limit` (Standard 100,
@@ -113,3 +114,44 @@ Versionierung jedes Textentwurfs. Direkte privilegierte SQL-Zugriffe bleiben in
 der Verantwortung des Betreibers. Speicherbedarf, Backup-Aufbewahrung und
 betrieblich notwendige Dokumentprüfung müssen beim Betrieb berücksichtigt werden;
 dieses Feature richtet keinen externen Dokumenten- oder Backupdienst ein.
+
+## Customer-linked repair intake
+
+`POST /api/v1/repair-orders` accepts new managed orders:
+
+```json
+{
+  "customer_id": 12,
+  "instrument_id": 34,
+  "work_description": "Replace bridge",
+  "expected_completion_date": "2026-12-15",
+  "internal_notes": "Confirm setup with customer"
+}
+```
+
+Both references must exist (otherwise HTTP 404). The contracting customer need
+not be the current instrument owner. The response is HTTP 201 with a unique ID.
+`accepted_at` defaults to the current UTC time; an explicitly supplied timestamp
+must include a timezone. `performed_at` is optional and stays null until known.
+`expected_completion_date` and `internal_notes` are optional. Descriptions are
+trimmed and limited to 1–10000 characters; notes to 10000 characters. Invalid
+input returns HTTP 422. No notes or descriptions are copied into audit events.
+
+`status` defaults to `accepted` and accepts `accepted`, `awaiting_approval`,
+`in_progress`, `awaiting_materials`, `ready_for_pickup`, `completed`, and
+`cancelled`. This intake API stores a status; it does not introduce a status
+transition API, approval, pricing or invoicing workflow. Details and instrument
+history include these fields. Internal notes share the existing staff-only
+authorization of repair records and are never exposed to customer accounts.
+
+Migration `2caf51093d78` preserves existing repair IDs, execution timestamps and
+documents. Historical entries receive `completed` but retain null customer and
+acceptance fields because those historical facts are unknown. New managed orders
+require both references and an acceptance timestamp. Do not interpret unknown
+legacy attribution as the instrument's current owner.
+
+The customer foreign key uses `ON DELETE RESTRICT`, as does the instrument
+reference. Customer or instrument deletion with linked orders returns HTTP 409;
+archiving and ownership changes preserve the original contracting customer.
+There is no cascading deletion. The migration refuses a downgrade if managed
+intake data would be lost; review and export that data before any rollback.
