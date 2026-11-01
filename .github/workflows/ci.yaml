@@ -136,7 +136,7 @@ jobs:
         run: uv sync --locked --dev
 
       - name: Run unit and lightweight API tests
-        run: make test-fast PYTEST_ARGS="--durations=20 --tb=short --junitxml=reports/unit-api.raw.xml"
+        run: bash scripts/diagnose_pytest.sh make test-fast PYTEST_ARGS="--durations=20 --tb=short --junitxml=reports/unit-api.raw.xml"
 
       - name: Summarize and sanitize test report
         if: always()
