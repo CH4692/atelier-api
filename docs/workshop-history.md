@@ -199,3 +199,9 @@ transaction; descriptions and notes are not copied into the audit trail.
 Concurrent updates lock the order while applying only supplied fields. The
 response uses `Cache-Control: private, no-store`; authentication, staff access
 and CSRF protection apply as for order creation.
+
+## Services and materials
+
+Repair services, material positions and exact cost totals are available through
+`/api/v1/repairs/{repair_id}/items`. See [Repair services and materials](repair-items.md)
+for inputs, partial updates, monetary rounding and completion guards.

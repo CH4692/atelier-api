@@ -14,6 +14,13 @@ from atelier_api.database import SessionDep
 from atelier_api.instruments.models import Instrument
 from atelier_api.instruments.schemas import InstrumentRead
 
+from .item_schemas import (
+    RepairItemCreate,
+    RepairItemRead,
+    RepairItemsRead,
+    RepairItemUpdate,
+)
+from .item_service import create_item, list_items, update_item
 from .models import MAX_DOCUMENT_BYTES, RepairDocument, RepairOrder
 from .schemas import (
     ArchiveUpdate,
@@ -379,3 +386,54 @@ def update_repair_status(
     """Timestamp actual changes; preserve the timestamp for idempotent retries."""
     response.headers["Cache-Control"] = "private, no-store"
     return change_status(session, repair_id, data.status)
+
+
+@router.get(
+    "/repairs/{repair_id}/items",
+    response_model=RepairItemsRead,
+    summary="Read repair services, materials and exact totals",
+    responses={404: {"description": "Repair order not found"}},
+)
+def get_repair_items(
+    repair_id: int, session: SessionDep, response: Response
+) -> RepairItemsRead:
+    response.headers["Cache-Control"] = "private, no-store"
+    return list_items(session, repair_id)
+
+
+@router.post(
+    "/repairs/{repair_id}/items",
+    response_model=RepairItemRead,
+    status_code=201,
+    summary="Add a service or material position to an editable repair",
+    responses={
+        404: {"description": "Repair order not found"},
+        409: {"description": "Repair is completed or cancelled"},
+    },
+)
+def add_repair_item(
+    repair_id: int, data: RepairItemCreate, session: SessionDep, response: Response
+) -> RepairItemRead:
+    response.headers["Cache-Control"] = "private, no-store"
+    return create_item(session, repair_id, data)
+
+
+@router.patch(
+    "/repairs/{repair_id}/items/{item_id}",
+    response_model=RepairItemRead,
+    summary="Update a repair position before completion",
+    responses={
+        404: {"description": "Repair order or item not found"},
+        409: {"description": "Repair is completed or cancelled"},
+    },
+)
+def patch_repair_item(
+    repair_id: int,
+    item_id: int,
+    data: RepairItemUpdate,
+    session: SessionDep,
+    response: Response,
+) -> RepairItemRead:
+    """Preserve omitted fields; supplied item fields cannot be null."""
+    response.headers["Cache-Control"] = "private, no-store"
+    return update_item(session, repair_id, item_id, data)
