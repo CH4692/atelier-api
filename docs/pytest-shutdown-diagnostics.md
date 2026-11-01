@@ -16,9 +16,11 @@ the GitHub Ubuntu image. Local hook probes showed only MainThread remaining;
 that observation cannot establish the remote runner's state.
 
 This change instruments the failure; it does not claim to fix its unknown cause.
-The diagnostic workflow has not been run remotely: uncommitted local workflow
-changes cannot be executed by GitHub Actions. Re-running an existing revision
-would not exercise this instrumentation. No commit, push or release is performed.
+The initial diagnostics at commit `2aa2a4b` ran in CI run 41292256234. That run
+completed with 694 passed and one failing diagnostic subprocess test. Its outer
+pytest returned 1, make returned 2, and the shell completed; the original
+10-minute timeout did not recur. The lifecycle corrections described below are
+local and have not been pushed or run remotely.
 
 ## Commands and environment
 
@@ -47,7 +49,8 @@ The original CI shell uses Bash with fail-on-error. The wrapper records the
 command's exit status and returns it, without `continue-on-error`, `|| true` on
 tests, forced success, or changing assertions. Active descendant processes after
 the command exits are reported and make an otherwise successful diagnostic step
-fail. It does not silently kill those descendants to manufacture success.
+fail. After reporting them it kills the ended session's remaining process group
+to close inherited output pipes; the diagnostic failure remains nonzero.
 
 ## Markers and boundary coverage
 
@@ -80,9 +83,14 @@ after reparenting. Shell observations distinguish `command_process_exit`,
 `python_process_exit_observed`, `python_process_still_present`, and
 `remaining_descendants_after_command_exit`. `shell_step_complete` records the
 wrapper's final statement and code; only GitHub's completed step/next-step state
-proves the runner observed completion. The diagnostic watchdog's own sleep
-process is terminated and reaped at cleanup. Cancellation signals are forwarded
-to the command group; no additional timeout is imposed on the tested application.
+proves the runner observed completion. The watchdog owns `ps`, `awk` and `sleep` as separate direct children, each
+started in the background and waited for with an interruptible Bash `wait`. Its
+TERM trap requests stopping; normal control flow kills and reaps the active
+stateless helper even if termination races with helper creation. No foreground
+pipeline can defer the stop trap. The wrapper then waits for the watchdog.
+Cancellation signals are forwarded to the command group and the wrapper
+re-waits/reaps the command before completing. The launcher resets inherited
+SIGINT/SIGTERM dispositions. No additional timeout is imposed on the command.
 
 ## Threads, processes and database privacy
 
@@ -132,7 +140,7 @@ fix. Another instrumented CI run is required. Keep the 10-minute deadline and al
 tests; fix only the demonstrated owner of the blocked resource, then remove this
 temporary wrapper, optional Make override, workflow prefix and regression probes.
 
-## Verified local result of this instrumentation
+## Initial local result of this instrumentation (before CI run 41292256234)
 
 The exact wrapped fast command completed with **695 passed in 20.42s**: the
 original 689 cases plus six diagnostic regressions. The final observed sequence
@@ -165,8 +173,81 @@ Files changed for this temporary investigation:
   workflow invariants.
 - `docs/pytest-shutdown-diagnostics.md`: evidence, usage, interpretation and limits.
 
-Another CI run **with these files available in its tested revision** is required.
+Another CI run **with the lifecycle corrections available in its tested revision** is required.
 Do not infer a root cause or apply a cleanup correction until that run supplies
 a blocked frame/process observation. GitHub only accepts stored workflow revisions;
 the no-commit/no-push constraint prevents running this local revision there.
 No uninstrumented rerun was triggered as a substitute.
+
+
+## Diagnostic subprocess failure: verified lifecycle defects and correction
+
+The CI failure at `communicate(timeout=10)` did not record the nested process's
+remaining stack/output in the assertion. The outer job's clean exit establishes
+that the original ten-minute job hang was not reproduced. The exact nested wait
+in that historical failure cannot be selected retroactively from its logs.
+Two defects were reproduced independently; neither requires a slow runner:
+
+1. The synthetic SIGUSR2 handler called `threading.Event.set()` asynchronously.
+   Event.wait and Event.set both acquire the same non-reentrant Condition lock.
+   Delivering SIGUSR2 while Event.wait held that lock left the monitored Python
+   alive, blocked in `threading.Condition.__enter__ -> Event.set -> signal handler
+   -> Event.wait`. A native dump verified that wait. The synthetic probes now
+   block SIGUSR2 and consume it synchronously with `sigwait`. Signals pending
+   before the wait remain pending; no lock-acquiring Python signal handler runs.
+2. The old watchdog ran `ps | awk` in the foreground. A FIFO-coordinated sampler
+   reproduced a command that had already exited 0 while the wrapper remained in
+   watchdog cleanup. Bash deferred the watchdog TERM trap until the sampler
+   finished. Terminating that sampler immediately let the wrapper return 0.
+   Those helpers also retained inherited output descriptors. The corrected
+   watcher tracks, terminates and waits for each direct helper; no pipeline or
+   untracked sleep survives cleanup. The regression verifies both EOF and that
+   the sampler PID has been reaped.
+
+A further local race produced status 158 (128 + macOS SIGUSR1): a late dump signal
+could arrive after faulthandler unregistered its handler during finalization.
+SIGUSR1 now has an ignored fallback disposition before faulthandler registration.
+Native dumps work while registered; after unregistration a late signal cannot
+terminate the interpreter. A controlled atexit test verifies that boundary.
+
+Timeouts have not been increased. If a nested test times out again, `drain`
+prints its wrapper state, retained output/stacks and only the owned process-group
+identities before cleanup. Test cleanup first requests TERM and drains output;
+a bounded three-second fallback kills known owned groups and reaps the wrapper.
+This is test-resource cleanup after a failure, not a retry or a larger test deadline.
+Interruption probes use an OS select wait, which is interruptible by SIGINT;
+synchronous SIGUSR2 coordination is reserved for deliberate release probes.
+
+Regressions cover normal/failing commands, blocked sampler shutdown, fixture and
+session finalization, interpreter joining, SIGINT/SIGTERM, caller timeout cleanup,
+an orphan holding output open, and late handler unregistration. Process-group
+cleanup reports unexpected descendants as failure even after terminating them.
+An intentionally orphaned grandchild may briefly be an adopted zombie awaiting
+OS reaping, but it is terminated and cannot retain output descriptors. All direct
+owned command/watchdog/helper processes are explicitly waited for.
+
+These deterministic reproductions establish real lifecycle faults and validate
+the corrections. They do not prove which fault caused the historical CI fixture
+timeout or explain the separate original ten-minute incident. Remote validation
+of the corrected diagnostics is still required; no commit/push/release is made.
+
+
+### Verification after lifecycle corrections
+
+- Previously failing `[fixture]` probe: 100 consecutive successful repetitions
+  with its existing communicate timeout unchanged.
+- `make test-fast`: **701 passed in 24.08s** (all previous 695 retained, six
+  additional lifecycle cases).
+- Exact wrapped CI command: **701 passed**, actual Python/command/shell exit 0,
+  final `python_process_exit_observed` and `shell_step_complete code=0` markers.
+- Complete PostgreSQL suite: **1251 passed in 49.41s**, using disposable local
+  worker databases, not development/Neon databases.
+- Ruff, formatting, mypy, Bash syntax, actionlint and whitespace checks passed.
+
+The blocked sampler regression specifically verifies that its direct child PID
+has been reaped and communicate observes EOF. Interrupted and timed-out probes
+verify their command and watchdog terminate and drain their inherited streams.
+Normal/failed command statuses remain 0/1; signal-driven cancellation is 130/143.
+An orphaned output writer is terminated and produces diagnostic failure 1.
+The wrapper still retains the original ten-minute CI job limit. No increased
+communicate deadline, arbitrary delay or automatic retry is used as a correction.

@@ -122,6 +122,9 @@ def main() -> int:
         parent=os.getppid(),
     )
     arm_dumps()
+    # CPython restores the previous disposition during finalization. A late
+    # watchdog signal must be ignored rather than terminating an exiting Python.
+    signal.signal(signal.SIGUSR1, signal.SIG_IGN)
     faulthandler.register(signal.SIGUSR1, file=TRACE_FD, all_threads=True)
     pidfile = os.environ.get("PYTEST_DIAGNOSTIC_PIDFILE")
     if pidfile:
