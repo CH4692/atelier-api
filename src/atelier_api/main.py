@@ -16,6 +16,7 @@ from atelier_api.auth.dependencies import get_current_user, require_internal_use
 from atelier_api.auth.router import router as auth_router
 from atelier_api.customers.router import customers_router
 from atelier_api.docs import swagger_ui
+from atelier_api.estimates.router import router as estimates_router
 from atelier_api.health.router import health_router
 from atelier_api.instruments.customer_router import customer_instruments_router
 from atelier_api.instruments.qr import router as qr_router
@@ -142,6 +143,7 @@ def create_app(config: Settings | None = None) -> FastAPI:
         instruments_router,
         customer_instruments_router,
         repairs_router,
+        estimates_router,
         photos_router,
         qr_router,
     ):

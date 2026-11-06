@@ -1,9 +1,43 @@
+import json
 import os
 import subprocess
 import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_fresh_alembic_environment_registers_estimate_models():
+    # Running in the pytest process would hide missing imports: API test
+    # collection already registers these models through the application router.
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """import io
+import json
+from alembic.config import Config
+from alembic.runtime.environment import EnvironmentContext
+from alembic.script import ScriptDirectory
+from sqlmodel import SQLModel
+
+config = Config('alembic.ini')
+script = ScriptDirectory.from_config(config)
+with EnvironmentContext(config, script, as_sql=True, output_buffer=io.StringIO(),
+                        fn=lambda *_: iter(())):
+    script.run_env()
+print(json.dumps(sorted(SQLModel.metadata.tables)))
+""",
+        ],
+        cwd=PROJECT_ROOT,
+        env={**os.environ, "DATABASE_URL": "sqlite://"},
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=20,
+    )
+    assert result.returncode == 0, result.stderr
+    assert {"repair_estimate", "estimate_item"} <= set(json.loads(result.stdout))
 
 
 def run_migration(url, *args):
