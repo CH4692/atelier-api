@@ -13,6 +13,7 @@ from atelier_api.auth.models import LoginRateLimit, UserSession  # noqa: F401
 
 # Register table models in SQLModel.metadata before Alembic inspects it.
 from atelier_api.customers.models import Customer  # noqa: F401
+from atelier_api.estimates.models import EstimateItem, RepairEstimate  # noqa: F401
 from atelier_api.instruments.models import (
     Instrument,  # noqa: F401
     InstrumentOwnershipEvent,  # noqa: F401

@@ -205,3 +205,9 @@ and CSRF protection apply as for order creation.
 Repair services, material positions and exact cost totals are available through
 `/api/v1/repairs/{repair_id}/items`. See [Repair services and materials](repair-items.md)
 for inputs, partial updates, monetary rounding and completion guards.
+
+## Cost estimates
+
+[Repair cost estimates](repair-estimates.md) provide independent service/material
+positions, numbered document revisions and recorded customer approval. Approved
+estimates remain readable while actual repair costs can be recorded separately.
