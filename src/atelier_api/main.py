@@ -23,6 +23,7 @@ from atelier_api.instruments.qr import router as qr_router
 from atelier_api.instruments.qr import scan_router
 from atelier_api.instruments.router import instruments_router
 from atelier_api.photos.router import router as photos_router
+from atelier_api.repair_orders.history_router import router as repair_history_router
 from atelier_api.repair_orders.router import router as repairs_router
 from atelier_api.settings import Settings, settings
 from atelier_api.version import software_version
@@ -143,6 +144,7 @@ def create_app(config: Settings | None = None) -> FastAPI:
         instruments_router,
         customer_instruments_router,
         repairs_router,
+        repair_history_router,
         estimates_router,
         photos_router,
         qr_router,

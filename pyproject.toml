@@ -71,6 +71,7 @@ plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 addopts = "--strict-markers --import-mode=importlib"
 markers = [
     "unit: isolated validation and business-rule tests",

@@ -112,6 +112,21 @@ def update_order(
         if getattr(order, name) != value
     }
     if changes:
+        details = AuditDetails.model_validate(
+            {
+                "changed_fields": sorted(changes),
+                **(
+                    {
+                        "previous_expected_completion_date": order.expected_completion_date,
+                        "new_expected_completion_date": changes[
+                            "expected_completion_date"
+                        ],
+                    }
+                    if "expected_completion_date" in changes
+                    else {}
+                ),
+            }
+        )
         order.sqlmodel_update(changes)
         session.add(order)
         record_event(
@@ -120,6 +135,7 @@ def update_order(
             AuditResource.REPAIR_ORDER,
             order.id,
             actor_id=session.info.get("audit_actor_id"),
+            details=details,
         )
         session.commit()
         session.refresh(order)

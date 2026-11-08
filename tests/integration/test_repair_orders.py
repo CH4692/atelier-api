@@ -593,7 +593,13 @@ def test_repair_patch_changes_only_supplied_fields_and_audits(
         assert events[0].actor_id == accounts["employee"]
         assert events[0].resource_type == "repair_order"
         assert events[0].succeeded is True
-        assert events[0].details == {}
+        expected_details = {"changed_fields": sorted(change)}
+        if "expected_completion_date" in change:
+            expected_details["previous_expected_completion_date"] = "2026-12-01"
+            expected_details["new_expected_completion_date"] = normalized[
+                "expected_completion_date"
+            ]
+        assert events[0].details == expected_details
 
 
 @pytest.mark.parametrize(

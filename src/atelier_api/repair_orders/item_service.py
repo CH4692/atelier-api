@@ -119,7 +119,9 @@ def update_item(
             AuditResource.REPAIR_ITEM,
             item.id,
             actor_id=session.info.get("audit_actor_id"),
-            details=AuditDetails(repair_order_id=repair_id),
+            details=AuditDetails.model_validate(
+                {"repair_order_id": repair_id, "changed_fields": sorted(changes)}
+            ),
         )
         session.commit()
         session.refresh(item)
