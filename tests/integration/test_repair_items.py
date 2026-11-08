@@ -148,7 +148,10 @@ def test_item_patch_recalculates_totals_and_preserves_omitted_fields(
         ).one()
         assert event.actor_id == accounts["employee"]
         assert event.resource_id == row["id"]
-        assert event.details == {"repair_order_id": order["id"]}
+        assert event.details == {
+            "repair_order_id": order["id"],
+            "changed_fields": sorted(change),
+        }
 
 
 @pytest.mark.parametrize(

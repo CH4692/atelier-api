@@ -37,6 +37,7 @@ def main() -> None:
         "/health/ready",
         "/api/v1/repairs",
         "/api/v1/repairs/{repair_id}",
+        "/api/v1/repairs/{repair_id}/history",
         "/api/v1/repairs/{repair_id}/status",
         "/api/v1/repairs/{repair_id}/estimates",
         "/api/v1/repairs/{repair_id}/estimates/{estimate_id}",

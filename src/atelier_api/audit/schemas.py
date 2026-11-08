@@ -1,6 +1,7 @@
 """Expose only audit facts and explicitly allowed administrative change details."""
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
@@ -13,6 +14,22 @@ class AuditDetails(BaseModel):
     """Allow only non-secret identifiers, roles and repair states in event details."""
 
     model_config = ConfigDict(extra="forbid")
+    changed_fields: (
+        list[
+            Literal[
+                "work_description",
+                "expected_completion_date",
+                "internal_notes",
+                "kind",
+                "description",
+                "quantity",
+                "unit_price",
+            ]
+        ]
+        | None
+    ) = None
+    previous_expected_completion_date: date | None = None
+    new_expected_completion_date: date | None = None
     estimate_status: EstimateStatus | None = None
     previous_estimate_status: EstimateStatus | None = None
     repair_order_id: int | None = Field(default=None, gt=0)

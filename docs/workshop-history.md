@@ -211,3 +211,10 @@ for inputs, partial updates, monetary rounding and completion guards.
 [Repair cost estimates](repair-estimates.md) provide independent service/material
 positions, numbered document revisions and recorded customer approval. Approved
 estimates remain readable while actual repair costs can be recorded separately.
+
+## Repair change events
+
+Administrators can retrieve the retained change trail for an individual repair
+through `GET /api/v1/repairs/{repair_id}/history`. See
+[Repair change history](repair-change-history.md) for attribution, status/date
+metadata, pagination, access restrictions and the existing audit-retention limits.
