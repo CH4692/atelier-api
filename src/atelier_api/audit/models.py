@@ -11,6 +11,8 @@ from sqlmodel import Field, SQLModel
 class AuditAction(StrEnum):
     """Enumerate application-controlled actions rather than accepting request text."""
 
+    REPAIR_TEMPLATE_CREATED = "repair_template.created"
+    REPAIR_TEMPLATE_UPDATED = "repair_template.updated"
     ESTIMATE_CREATED = "repair_estimate.created"
     ESTIMATE_UPDATED = "repair_estimate.updated"
     ESTIMATE_STATUS_CHANGED = "repair_estimate.status_changed"
@@ -66,6 +68,7 @@ class AuditAction(StrEnum):
 class AuditResource(StrEnum):
     """Identify resource categories without retaining resource contents."""
 
+    REPAIR_TEMPLATE = "repair_template"
     CUSTOMER = "customer"
     INSTRUMENT = "instrument"
     REPAIR_ESTIMATE = "repair_estimate"

@@ -11,10 +11,12 @@ from pydantic import (
     StrictBool,
     StringConstraints,
     field_validator,
+    model_validator,
 )
 
 from atelier_api.instruments.schemas import InstrumentRead
 
+from .item_schemas import UnitPrice
 from .statuses import RepairStatus
 
 
@@ -39,14 +41,31 @@ class RepairOrderRegister(BaseModel):
     model_config = ConfigDict(extra="forbid")
     customer_id: int = Field(gt=0)
     instrument_id: int = Field(gt=0)
+    template_id: int | None = Field(default=None, gt=0)
+    template_unit_price: UnitPrice | None = None
     work_description: Annotated[
-        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=10000)
-    ]
+        str | None,
+        StringConstraints(strip_whitespace=True, min_length=1, max_length=10000),
+    ] = None
     accepted_at: AwareDatetime = Field(default_factory=lambda: datetime.now(UTC))
     expected_completion_date: date | None = None
     status: RepairStatus = RepairStatus.ACCEPTED
     internal_notes: str | None = Field(default=None, max_length=10000)
     performed_at: AwareDatetime | None = None
+
+    @model_validator(mode="after")
+    def require_description_or_template(self) -> RepairOrderRegister:
+        if self.template_id is None:
+            if self.work_description is None:
+                raise ValueError("Repair description or template is required")
+            if "template_unit_price" in self.model_fields_set:
+                raise ValueError("Template price requires a template")
+        elif (
+            "work_description" in self.model_fields_set
+            and self.work_description is None
+        ):
+            raise ValueError("Repair description cannot be null")
+        return self
 
     @field_validator("accepted_at", "performed_at")
     @classmethod
