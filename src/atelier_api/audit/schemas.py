@@ -32,6 +32,7 @@ class AuditDetails(BaseModel):
     new_expected_completion_date: date | None = None
     estimate_status: EstimateStatus | None = None
     previous_estimate_status: EstimateStatus | None = None
+    template_id: int | None = Field(default=None, gt=0)
     repair_order_id: int | None = Field(default=None, gt=0)
     previous_status: RepairStatus | None = None
     new_status: RepairStatus | None = None

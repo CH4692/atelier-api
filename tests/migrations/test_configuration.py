@@ -7,7 +7,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_fresh_alembic_environment_registers_estimate_models():
+def test_fresh_alembic_environment_registers_estimate_and_template_models():
     # Running in the pytest process would hide missing imports: API test
     # collection already registers these models through the application router.
     result = subprocess.run(
@@ -37,7 +37,9 @@ print(json.dumps(sorted(SQLModel.metadata.tables)))
         timeout=20,
     )
     assert result.returncode == 0, result.stderr
-    assert {"repair_estimate", "estimate_item"} <= set(json.loads(result.stdout))
+    assert {"repair_estimate", "estimate_item", "repair_template"} <= set(
+        json.loads(result.stdout)
+    )
 
 
 def run_migration(url, *args):

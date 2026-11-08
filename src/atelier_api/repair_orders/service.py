@@ -11,7 +11,10 @@ from atelier_api.audit.schemas import AuditDetails
 from atelier_api.audit.service import record_event
 from atelier_api.customers.models import Customer
 from atelier_api.instruments.models import Instrument
+from atelier_api.repair_templates.models import RepairTemplate
 
+from .item_models import RepairItem
+from .item_schemas import RepairItemCreate
 from .models import RepairDocument, RepairOrder
 from .schemas import (
     RepairDocumentRead,
@@ -62,7 +65,13 @@ def repair_details(
     return details
 
 
-def persist_order(session: Session, order: RepairOrder) -> RepairOrderRead:
+def persist_order(
+    session: Session,
+    order: RepairOrder,
+    *,
+    initial_item: RepairItemCreate | None = None,
+    template_id: int | None = None,
+) -> RepairOrderRead:
     """Commit the order and creation audit in one transaction."""
     session.add(order)
     session.flush()
@@ -72,7 +81,23 @@ def persist_order(session: Session, order: RepairOrder) -> RepairOrderRead:
         AuditResource.REPAIR_ORDER,
         order.id,
         actor_id=session.info.get("audit_actor_id"),
+        details=AuditDetails(template_id=template_id)
+        if template_id is not None
+        else None,
     )
+    if initial_item is not None:
+        assert order.id is not None
+        item = RepairItem(repair_order_id=order.id, **initial_item.model_dump())
+        session.add(item)
+        session.flush()
+        record_event(
+            session,
+            AuditAction.REPAIR_ITEM_CREATED,
+            AuditResource.REPAIR_ITEM,
+            item.id,
+            actor_id=session.info.get("audit_actor_id"),
+            details=AuditDetails(repair_order_id=order.id, template_id=template_id),
+        )
     session.commit()
     session.refresh(order)
     return RepairOrderRead.model_validate(order)
@@ -92,8 +117,34 @@ def register_order(session: Session, data: RepairOrderRegister) -> RepairOrderRe
     ).scalar_one_or_none()
     if instrument is None:
         raise HTTPException(404, "Instrument not found")
+    values = data.model_dump(exclude={"template_id", "template_unit_price"})
+    initial_item = None
+    if data.template_id is not None:
+        template = session.execute(
+            select(RepairTemplate)
+            .where(col(RepairTemplate.id) == data.template_id)
+            .with_for_update()
+        ).scalar_one_or_none()
+        if template is None:
+            raise HTTPException(404, "Repair template not found")
+        values["work_description"] = data.work_description or template.description
+        price = (
+            data.template_unit_price
+            if "template_unit_price" in data.model_fields_set
+            else template.default_unit_price
+        )
+        if price is not None:
+            initial_item = RepairItemCreate(
+                kind="service",
+                description=template.description,
+                quantity=1,
+                unit_price=price,
+            )
     return persist_order(
-        session, RepairOrder(**data.model_dump(), status_updated_at=data.accepted_at)
+        session,
+        RepairOrder(**values, status_updated_at=data.accepted_at),
+        initial_item=initial_item,
+        template_id=data.template_id,
     )
 
 

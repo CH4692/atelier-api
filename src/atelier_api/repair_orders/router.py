@@ -333,14 +333,18 @@ def download_document(document_id: int, session: SessionDep) -> Response:
     response_model=RepairOrderRead,
     status_code=201,
     summary="Register repair intake for an existing customer and instrument",
-    responses={404: {"description": "Customer or instrument not found"}},
+    responses={
+        404: {"description": "Customer, instrument or repair template not found"}
+    },
 )
 @router.post(
     "/repair-orders",
     response_model=RepairOrderRead,
     status_code=201,
     summary="Accept a repair order for a customer and instrument",
-    responses={404: {"description": "Customer or instrument not found"}},
+    responses={
+        404: {"description": "Customer, instrument or repair template not found"}
+    },
 )
 def register_repair_order(
     data: RepairOrderRegister, session: SessionDep
@@ -350,6 +354,9 @@ def register_repair_order(
     Acceptance defaults to the current UTC timestamp. Planned work has no
     performed_at timestamp unless one is explicitly supplied. Customer and
     instrument remain referenced independently of later ownership changes.
+    Selecting template_id copies its description and optionally creates a service
+    position with quantity 1. Explicit description/price overrides affect only
+    this repair; template_unit_price=null suppresses the default service position.
     """
     return register_order(session, data)
 
