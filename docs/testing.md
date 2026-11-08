@@ -215,3 +215,25 @@ performed merely to obtain a benchmark.
 Reference: [pytest-xdist worker identifiers and isolation](https://pytest-xdist.readthedocs.io/en/stable/how-to.html),
 [GitHub workflow syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax),
 and [pytest reporting](https://docs.pytest.org/en/stable/how-to/output.html).
+
+## Repair order regression coverage
+
+Repair tests cover the API contract and real PostgreSQL behavior:
+
+- `tests/repair_orders/`: input validation, decimal rounding and all status pairs.
+- `tests/integration/test_repair_orders.py`: creation, retrieval, filtering,
+  pagination, partial updates, invalid references, restrictive foreign keys,
+  migrations and atomic audit rollback.
+- `tests/integration/test_repairs.py`: persisted status transitions, UTC timestamps,
+  invalid transitions, terminal states and concurrent updates.
+- `tests/integration/test_repair_items.py`: exact numeric persistence, rounded
+  service/material subtotals, recalculation, invalid edits, finalization locks and
+  concurrent item edits. Its end-to-end workflow creates a repair, retrieves and
+  updates it, revises mixed cost positions and completes it without changing totals.
+- `tests/integration/test_repair_history.py`: attribution, repair-scoped history,
+  retention and administrator access.
+
+Run `make test` for complete coverage or `make test-integration` for PostgreSQL
+checks. Both require a dedicated `TEST_DATABASE_URL`; `make test-fast` intentionally
+excludes integration tests. The existing CI PostgreSQL job runs the integration
+suite, including tests marked `e2e`, against its disposable PostgreSQL service.

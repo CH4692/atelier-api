@@ -439,3 +439,109 @@ def test_item_edit_waits_for_concurrent_completion(postgres_engine):
             connection.execute(
                 text("DELETE FROM customer WHERE id=:id"), {"id": ids[3]}
             )
+
+
+@pytest.mark.e2e
+def test_repair_workflow_recalculates_mixed_costs_and_preserves_final_total(
+    repair_items, db_connection
+):
+    client, order, items_path = repair_items
+    repair_path = f"/api/v1/repairs/{order['id']}"
+    assert client.get(repair_path).json()["status"] == "accepted"
+    response = client.patch(
+        repair_path,
+        json={
+            "work_description": "Fit bridge and replace strings",
+            "expected_completion_date": "2026-12-01",
+            "internal_notes": "Check string height",
+        },
+    )
+    assert response.status_code == 200, response.text
+    detail = client.get(repair_path).json()
+    assert detail["work_description"] == "Fit bridge and replace strings"
+    assert detail["expected_completion_date"] == "2026-12-01"
+    assert detail["internal_notes"] == "Check string height"
+    assert detail["customer_id"] == order["customer_id"]
+    assert detail["instrument_id"] == order["instrument_id"]
+
+    positions = []
+    for kind, quantity, price in [
+        ("service", "1.125", "45.50"),
+        ("material", "3", "12.35"),
+        ("service", "0.5", "0.01"),
+    ]:
+        created = client.post(
+            items_path,
+            json={**PAYLOAD, "kind": kind, "quantity": quantity, "unit_price": price},
+        )
+        assert created.status_code == 201, created.text
+        positions.append(created.json())
+    summary = client.get(items_path).json()
+    assert [item["line_total"] for item in summary["items"]] == [
+        "51.19",
+        "37.05",
+        "0.01",
+    ]
+    assert summary["service_total"] == "51.20"
+    assert summary["material_total"] == "37.05"
+    assert summary["total"] == "88.25"
+
+    updated = client.patch(
+        f"{items_path}/{positions[0]['id']}",
+        json={"kind": "material", "quantity": "1.250", "unit_price": "40.00"},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["line_total"] == "50.00"
+    final_costs = client.get(items_path).json()
+    assert final_costs["service_total"] == "0.01"
+    assert final_costs["material_total"] == "87.05"
+    assert final_costs["total"] == "87.06"
+
+    for status in ["in_progress", "ready_for_pickup", "completed"]:
+        changed = client.patch(f"{repair_path}/status", json={"status": status})
+        assert changed.status_code == 200, changed.text
+        assert client.get(repair_path).json()["status"] == status
+    assert client.get(items_path).json() == final_costs
+    assert (
+        client.patch(
+            f"{items_path}/{positions[1]['id']}", json={"unit_price": "0"}
+        ).status_code
+        == 409
+    )
+    assert client.get(items_path).json() == final_costs
+
+    with Session(
+        bind=db_connection, join_transaction_mode="create_savepoint"
+    ) as session:
+        stored = session.get(RepairOrder, order["id"])
+        assert stored.status == RepairStatus.COMPLETED
+        assert stored.expected_completion_date.isoformat() == "2026-12-01"
+        item = session.get(RepairItem, positions[0]["id"])
+        assert item.quantity == Decimal("1.250")
+        assert item.unit_price == Decimal("40.00")
+        assert item.kind.value == "material"
+
+
+@pytest.mark.parametrize(
+    "change",
+    [{"quantity": "-1"}, {"unit_price": "-0.01"}, {"quantity": "1.0001"}],
+)
+def test_invalid_item_patch_preserves_persisted_costs_and_audit(
+    repair_items, db_connection, change
+):
+    client, _, path = repair_items
+    created = client.post(path, json=PAYLOAD)
+    assert created.status_code == 201
+    item = created.json()
+    before = client.get(path).json()
+    audit_count = db_connection.scalar(text("SELECT count(*) FROM audit_event"))
+    response = client.patch(f"{path}/{item['id']}", json=change)
+    assert response.status_code == 422, response.text
+    assert client.get(path).json() == before
+    assert db_connection.scalar(text("SELECT count(*) FROM audit_event")) == audit_count
+    with Session(
+        bind=db_connection, join_transaction_mode="create_savepoint"
+    ) as session:
+        stored = session.get(RepairItem, item["id"])
+        assert stored.quantity == Decimal("0.500")
+        assert stored.unit_price == Decimal("0.01")
