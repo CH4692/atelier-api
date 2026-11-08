@@ -97,6 +97,6 @@ class AuditEvent(SQLModel, table=True):
         index=True,
     )
     succeeded: bool
-    details: dict[str, str | int | None] = Field(
+    details: dict[str, str | int | list[str] | None] = Field(
         default_factory=dict, sa_column=Column(JSON, nullable=False)
     )

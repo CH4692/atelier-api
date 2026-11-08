@@ -9,6 +9,7 @@ from sqlalchemy import func
 from sqlmodel import col, select
 
 from atelier_api.audit.models import AuditAction, AuditResource
+from atelier_api.audit.schemas import AuditDetails
 from atelier_api.audit.service import record_event
 from atelier_api.database import SessionDep
 from atelier_api.instruments.models import Instrument
@@ -296,6 +297,7 @@ async def upload_document(
         AuditResource.REPAIR_DOCUMENT,
         document.id,
         actor_id=session.info.get("audit_actor_id"),
+        details=AuditDetails(repair_order_id=order_id),
     )
     session.commit()
     session.refresh(document)
