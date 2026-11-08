@@ -11,6 +11,10 @@ from sqlmodel import Field, SQLModel
 class AuditAction(StrEnum):
     """Enumerate application-controlled actions rather than accepting request text."""
 
+    ESTIMATE_CREATED = "repair_estimate.created"
+    ESTIMATE_UPDATED = "repair_estimate.updated"
+    ESTIMATE_STATUS_CHANGED = "repair_estimate.status_changed"
+    ESTIMATE_APPROVED = "repair_estimate.approved"
     REPAIR_ITEM_CREATED = "repair_item.created"
     REPAIR_ITEM_UPDATED = "repair_item.updated"
     REPAIR_STATUS_CHANGED = "repair_order.status_changed"
@@ -64,6 +68,7 @@ class AuditResource(StrEnum):
 
     CUSTOMER = "customer"
     INSTRUMENT = "instrument"
+    REPAIR_ESTIMATE = "repair_estimate"
     REPAIR_ITEM = "repair_item"
     REPAIR_ORDER = "repair_order"
     REPAIR_DOCUMENT = "repair_document"
