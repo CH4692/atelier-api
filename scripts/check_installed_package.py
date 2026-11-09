@@ -66,6 +66,17 @@ def main() -> None:
 
     entrypoint = next(ep for ep in package.entry_points if ep.name == "atelier-api")
     assert callable(entrypoint.load())
+    demo = next(ep for ep in package.entry_points if ep.name == "atelier-demo")
+    assert callable(demo.load())
+    subprocess.run(
+        [
+            str(Path(sys.executable).parent / "atelier-demo"),
+            "--dry-run",
+            "--as-of",
+            "2026-11-09",
+        ],
+        check=True,
+    )
     cleanup = next(
         ep for ep in package.entry_points if ep.name == "atelier-sessions-cleanup"
     )

@@ -1138,3 +1138,13 @@ Fotos und QR-Links bleiben für berechtigte Mitarbeiter erreichbar. Geschützte
 Referenzen verhindern eine permanente Löschung weiterhin mit HTTP 409.
 Details und die spätere Mietvertrags-Erweiterung:
 [Instrument archival](docs/instrument-archive.md).
+
+## Fiktive Demo-Daten
+
+`uv run atelier-demo --dry-run` zeigt das neue Small-Profil ohne Datenbankzugriff.
+Es enthält 50 Kunden, 100 Instrumente, 150 Reparaturaufträge, 30 Dokumente sowie
+fünf interne und ein Kundenkonto. Optional werden 50 klar gekennzeichnete
+Demo-Illustrationen über den vorhandenen privaten R2-Speicher hochgeladen.
+Zielschutz, Passwortübergabe, Wiederholung und nicht implementierte Entitäten sind
+in [docs/demo-data.md](docs/demo-data.md) beschrieben. Der Seeder verwendet niemals
+`DATABASE_URL` als implizites Schreibziel und löscht keine vorhandenen Daten.

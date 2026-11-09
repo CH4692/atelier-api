@@ -26,6 +26,7 @@ entrypoint = "atelier_api.main:app"
 
 [project.scripts]
 atelier-api = "atelier_api.cli:main"
+atelier-demo = "atelier_api.demo.cli:main"
 atelier-users = "atelier_api.users.cli:main"
 atelier-audit-cleanup = "atelier_api.audit.cli:main"
 atelier-photos-purge = "atelier_api.photos.purge_cli:main"
